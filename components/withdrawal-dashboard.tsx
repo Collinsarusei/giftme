@@ -16,13 +16,9 @@ interface WithdrawalDashboardProps {
 export function WithdrawalDashboard({ paystackGifts, onWithdraw, isWithdrawing }: WithdrawalDashboardProps) {
   const [showFeeInfo, setShowFeeInfo] = useState(false)
 
-  const calculateFee = (amount: number, currency = "NGN") => {
-    if (currency === "NGN") {
-      if (amount <= 5000) return 10
-      if (amount <= 50000) return 25
-      return 50
-    }
-    return Math.max(amount * 0.015, 1)
+  const calculateFee = (amount: number, currency = "KES") => {
+    // 20 Ksh transaction fee + 3% developer share
+    return 20 + Math.ceil(amount * 0.03)
   }
 
   const totalWithdrawable = paystackGifts.reduce((sum, gift) => sum + gift.amount, 0)
@@ -75,12 +71,10 @@ export function WithdrawalDashboard({ paystackGifts, onWithdraw, isWithdrawing }
 
             {showFeeInfo && (
               <div className="mt-2 p-3 bg-blue-50 rounded-lg text-sm">
-                <p className="font-semibold text-blue-800 mb-2">Paystack Transfer Fees (NGN):</p>
+                <p className="font-semibold text-blue-800 mb-2">Withdrawal Deductions:</p>
                 <ul className="text-blue-700 space-y-1">
-                  <li>• ≤ ₦5,000: ₦10 flat fee</li>
-                  <li>• ₦5,001 - ₦50,000: ₦25 flat fee</li>
-                  <li>• &gt; ₦50,000: ₦50 flat fee</li>
-                  <li>• Other currencies: 1.5% (min 1 unit)</li>
+                  <li>• 20 Ksh transaction fee per withdrawal</li>
+                  <li>• 3% developer share per withdrawal</li>
                 </ul>
               </div>
             )}
@@ -138,9 +132,10 @@ export function WithdrawalDashboard({ paystackGifts, onWithdraw, isWithdrawing }
               <Button
                 className="w-full bg-orange-600 hover:bg-orange-700"
                 disabled={isWithdrawing !== "" || netAmount <= 0}
+                onClick={() => onWithdraw("all")}
               >
                 <Download className="h-4 w-4 mr-2" />
-                Withdraw All (₦{netAmount.toLocaleString()} after fees)
+                Withdraw All (KES {netAmount.toLocaleString()} after fees)
               </Button>
             </div>
           )}

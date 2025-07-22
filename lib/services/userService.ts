@@ -1,6 +1,7 @@
 import { getCollection } from "../mongodb"
 import type { User, CreateUserData } from "../models/User"
 import { ObjectId } from "mongodb"
+import bcrypt from "bcryptjs"
 
 export class UserService {
   private static collectionName = "users"
@@ -20,10 +21,14 @@ export class UserService {
       throw new Error("Email already exists")
     }
 
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(userData.password, 10)
+
     const newUser: User = {
       id: new ObjectId().toString(),
       username: userData.username,
       email: userData.email,
+      password: hashedPassword,
       createdAt: new Date().toISOString(),
       events: [],
       profile: userData.profile || {},
@@ -33,11 +38,13 @@ export class UserService {
     return { ...newUser, _id: result.insertedId }
   }
 
-  static async getUserByCredentials(username: string, email: string): Promise<User | null> {
+  static async getUserByCredentials(username: string, password: string): Promise<User | null> {
     const collection = await getCollection(this.collectionName)
-    const result = await collection.findOne({ username, email })
+    const result = await collection.findOne({ username })
     if (!result) return null
-    const { _id, ...user } = result
+    const isMatch = await bcrypt.compare(password, result.password)
+    if (!isMatch) return null
+    const { _id, password: _pw, ...user } = result
     return user as User
   }
 

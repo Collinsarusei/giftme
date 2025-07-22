@@ -5,6 +5,7 @@ export interface User {
   id?: string
   username: string
   email: string
+  password: string // Hashed password
   createdAt: string
   events: string[] // Array of event IDs
   profile?: {
@@ -18,6 +19,7 @@ export interface User {
 export interface CreateUserData {
   username: string
   email: string
+  password: string // Hashed password
   profile?: {
     firstName?: string
     lastName?: string

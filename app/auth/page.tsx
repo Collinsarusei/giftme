@@ -14,8 +14,8 @@ import { useRouter } from "next/navigation"
 export default function AuthPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
-  const [loginData, setLoginData] = useState({ username: "", email: "" })
-  const [registerData, setRegisterData] = useState({ username: "", email: "", confirmEmail: "" })
+  const [loginData, setLoginData] = useState({ username: "", password: "" })
+  const [registerData, setRegisterData] = useState({ username: "", email: "", password: "", confirmEmail: "", confirmPassword: "" })
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,6 +52,10 @@ export default function AuthPage() {
       alert("Emails don't match!")
       return
     }
+    if (registerData.password !== registerData.confirmPassword) {
+      alert("Passwords don't match!")
+      return
+    }
 
     setIsLoading(true)
 
@@ -62,6 +66,7 @@ export default function AuthPage() {
         body: JSON.stringify({
           username: registerData.username,
           email: registerData.email,
+          password: registerData.password,
         }),
       })
 
@@ -130,13 +135,13 @@ export default function AuthPage() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="loginEmail">Email</Label>
+                      <Label htmlFor="loginPassword">Password</Label>
                       <Input
-                        id="loginEmail"
-                        type="email"
-                        placeholder="Enter your email"
-                        value={loginData.email}
-                        onChange={(e) => setLoginData((prev) => ({ ...prev, email: e.target.value }))}
+                        id="loginPassword"
+                        type="password"
+                        placeholder="Enter your password"
+                        value={loginData.password}
+                        onChange={(e) => setLoginData((prev) => ({ ...prev, password: e.target.value }))}
                         required
                       />
                     </div>
@@ -177,6 +182,28 @@ export default function AuthPage() {
                         placeholder="Confirm your email"
                         value={registerData.confirmEmail}
                         onChange={(e) => setRegisterData((prev) => ({ ...prev, confirmEmail: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="registerPassword">Password</Label>
+                      <Input
+                        id="registerPassword"
+                        type="password"
+                        placeholder="Enter your password"
+                        value={registerData.password}
+                        onChange={(e) => setRegisterData((prev) => ({ ...prev, password: e.target.value }))}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="confirmPassword">Confirm Password</Label>
+                      <Input
+                        id="confirmPassword"
+                        type="password"
+                        placeholder="Confirm your password"
+                        value={registerData.confirmPassword}
+                        onChange={(e) => setRegisterData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
                         required
                       />
                     </div>

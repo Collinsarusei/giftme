@@ -31,12 +31,11 @@ export default function SupportDeveloperPage() {
   const [customAmount, setCustomAmount] = useState("")
   const [supportMessage, setSupportMessage] = useState("")
   const [supporterName, setSupporterName] = useState("")
-  const [paymentMethod, setPaymentMethod] = useState("")
-  const [mpesaNumber, setMpesaNumber] = useState("")
+  const [paymentMethod, setPaymentMethod] = useState("card")
   const [isProcessing, setIsProcessing] = useState(false)
 
   const handleSupportPayment = async () => {
-    if (!selectedPackage || !paymentMethod) return
+    if (!selectedPackage) return
 
     setIsProcessing(true)
 
@@ -69,7 +68,6 @@ export default function SupportDeveloperPage() {
       setSupportMessage("")
       setSupporterName("")
       setPaymentMethod("")
-      setMpesaNumber("")
     } catch (error) {
       alert("Payment failed. Please try again.")
     } finally {
@@ -222,42 +220,13 @@ export default function SupportDeveloperPage() {
 
                   <div className="space-y-2">
                     <Label>Payment Method</Label>
-                    <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose payment method" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="mpesa">
-                          <div className="flex items-center gap-2">
-                            <Smartphone className="h-4 w-4" />
-                            M-Pesa
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="card">
-                          <div className="flex items-center gap-2">
-                            <CreditCard className="h-4 w-4" />
-                            Credit/Debit Card
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Input value="Paystack (Card)" readOnly className="bg-gray-100" />
                   </div>
-
-                  {paymentMethod === "mpesa" && (
-                    <div className="space-y-2">
-                      <Label>M-Pesa Number</Label>
-                      <Input
-                        placeholder="254712345678"
-                        value={mpesaNumber}
-                        onChange={(e) => setMpesaNumber(e.target.value)}
-                      />
-                    </div>
-                  )}
 
                   <Button
                     className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                     onClick={handleSupportPayment}
-                    disabled={!paymentMethod || isProcessing || (paymentMethod === "mpesa" && !mpesaNumber)}
+                    disabled={!selectedPackage || isProcessing}
                   >
                     {isProcessing ? (
                       <>

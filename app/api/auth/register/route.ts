@@ -3,10 +3,10 @@ import { UserService } from "@/lib/services/userService"
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, email, profile } = await request.json()
+    const { username, email, password, profile } = await request.json()
 
-    if (!username || !email) {
-      return NextResponse.json({ success: false, message: "Username and email are required" }, { status: 400 })
+    if (!username || !email || !password) {
+      return NextResponse.json({ success: false, message: "Username, email, and password are required" }, { status: 400 })
     }
 
     // Validate email format
@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
     const user = await UserService.createUser({
       username,
       email,
+      password,
       profile,
     })
 

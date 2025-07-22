@@ -3,13 +3,13 @@ import { UserService } from "@/lib/services/userService"
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, email } = await request.json()
+    const { username, password } = await request.json()
 
-    if (!username || !email) {
-      return NextResponse.json({ success: false, message: "Username and email are required" }, { status: 400 })
+    if (!username || !password) {
+      return NextResponse.json({ success: false, message: "Username and password are required" }, { status: 400 })
     }
 
-    const user = await UserService.getUserByCredentials(username, email)
+    const user = await UserService.getUserByCredentials(username, password)
 
     if (!user) {
       return NextResponse.json(

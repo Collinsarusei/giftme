@@ -103,32 +103,70 @@ export default function DashboardPage() {
   }
 
   // Update withdrawal to use API
-  const handlePaystackWithdrawal = async (giftId: string, eventId?: string) => {
+  const handlePaystackWithdrawal = async (giftId: string | "all", eventId?: string) => {
     setIsWithdrawing(giftId)
     try {
-      // Call API to update gift status to withdrawn
-      const res = await fetch("/api/events/gift", {
-        method: "PATCH",
+      if (giftId === "all" && selectedEvent) {
+        // Bulk withdrawal: sum all pending Paystack gifts for this event
+        const gifts = paystackGifts.filter(g => g.eventId === selectedEvent.id)
+        const totalAmount = gifts.reduce((sum, g) => sum + g.amount, 0)
+        const totalFees = gifts.reduce((sum, g) => sum + (20 + Math.ceil(g.amount * 0.03)), 0)
+        const netAmount = totalAmount - totalFees
+        if (netAmount <= 0) {
+          alert("Net withdrawal amount is too low after fees.")
+          setIsWithdrawing("")
+          return
+        }
+        // Call backend to process bulk withdrawal
+        const res = await fetch("/api/payments/paystack-transfer", {
+          method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          eventId: eventId,
-          giftId: giftId,
-          status: "withdrawn",
-          withdrawnAt: new Date().toISOString(),
+            amount: netAmount,
+            name: selectedEvent.creatorName,
+            mpesaNumber: selectedEvent.mpesaNumber,
+            reason: `Bulk withdrawal for event ${selectedEvent.name}`,
         }),
       })
       const data = await res.json()
       if (data.success) {
-        // Refresh events
-        if (selectedEventId) {
-          const eventRes = await fetch(`/api/events?createdBy=${selectedEvent?.createdBy}`)
-          const eventData = await eventRes.json()
-          if (eventData.success) setUserEvents(eventData.events)
+          window.location.reload()
+          alert("✅ Bulk withdrawal successful! Money has been sent to your M-Pesa number.")
+        } else {
+          alert("❌ Bulk withdrawal failed. Please try again.")
         }
+      } else {
+        // Individual withdrawal (legacy, for single gifts)
+        const gift = paystackGifts.find(g => g.id === giftId)
+        if (!gift || !selectedEvent) {
+          alert("Gift or event not found.")
+          setIsWithdrawing("")
+          return
+        }
+        const fee = 20 + Math.ceil(gift.amount * 0.03)
+        const netAmount = gift.amount - fee
+        if (netAmount <= 0) {
+          alert("Net withdrawal amount is too low after fees.")
+          setIsWithdrawing("")
+          return
+        }
+        const res = await fetch("/api/payments/paystack-transfer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            amount: netAmount,
+            name: selectedEvent.creatorName,
+            mpesaNumber: selectedEvent.mpesaNumber,
+            reason: `Withdrawal for event ${selectedEvent.name}`,
+          }),
+        })
+        const data = await res.json()
+        if (data.success) {
         window.location.reload()
-        alert("✅ Withdrawal successful! Money has been sent to your bank account.")
+          alert("✅ Withdrawal successful! Money has been sent to your M-Pesa number.")
       } else {
         alert("❌ Withdrawal failed. Please try again.")
+        }
       }
     } catch (error) {
       alert("❌ Withdrawal failed. Please try again.")

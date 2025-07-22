@@ -67,7 +67,6 @@ export default function EventPage() {
   const isNewEvent = searchParams?.get("new") === "true"
   const [event, setEvent] = useState<any>(null)
   const [selectedPackage, setSelectedPackage] = useState<any>(null)
-  const [paymentMethod, setPaymentMethod] = useState("")
   const [giftMessage, setGiftMessage] = useState("")
   const [giftFrom, setGiftFrom] = useState("")
   const [giftEmail, setGiftEmail] = useState("")
@@ -155,56 +154,12 @@ export default function EventPage() {
   }
 
   const handleGiftSubmit = async () => {
-    if (!selectedPackage || !paymentMethod) return
+    if (!selectedPackage) return
 
     setIsProcessing(true)
     setPaymentStatus("Initiating payment...")
 
     try {
-      if (paymentMethod === "mpesa") {
-        setPaymentStatus("Sending STK Push to your phone...")
-
-        // M-Pesa STK Push
-        const response = await fetch("/api/payments/mpesa-stk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount: selectedPackage.amount,
-            phoneNumber: phoneNumber,
-            eventName: event.name,
-            description: `Gift from ${giftFrom || "Anonymous"} for ${event.name}`,
-          }),
-        })
-
-        const { ok: jsonOk, data } = await safeJson(response)
-
-        if (!jsonOk && !response.ok) {
-          throw new Error(data.message || "Payment service error")
-        }
-
-        if (data.success) {
-          setPaymentStatus(
-            data.isTestMode
-              ? "⚠️ Test mode: Gift recorded successfully!"
-              : "📱 STK Push sent! Check your phone and enter your M-Pesa PIN",
-          )
-
-          // Show phone formatting info if available
-          if (data.phoneFormatted) {
-            setPaymentStatus((prev) => prev + `\n📱 Phone: ${data.phoneFormatted}`)
-          }
-
-          updateEventWithGift("mpesa", "completed")
-          setShowSuccess(true)
-          setDialogOpen(false)
-          resetForm()
-          setTimeout(() => setShowSuccess(false), 5000)
-        } else {
-          throw new Error(data.message || "M-Pesa payment failed")
-        }
-      } else if (paymentMethod === "card") {
-        setPaymentStatus("Initializing card payment...")
-
         // Paystack payment
         const response = await fetch("/api/payments/paystack-initialize", {
           method: "POST",
@@ -249,7 +204,6 @@ export default function EventPage() {
           setTimeout(() => setShowSuccess(false), 5000)
         } else {
           throw new Error(data.message || "Card payment initialization failed")
-        }
       }
     } catch (error) {
       console.error("Payment error:", error)
@@ -300,7 +254,6 @@ export default function EventPage() {
     setGiftFrom("")
     setGiftEmail("")
     setPhoneNumber("")
-    setPaymentMethod("")
     setPaymentStatus("")
   }
 
@@ -652,29 +605,6 @@ export default function EventPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Payment Method</Label>
-                    <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choose payment method" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="mpesa">
-                          <div className="flex items-center gap-2">
-                            <Smartphone className="h-4 w-4" />
-                            M-Pesa (Direct to recipient)
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="card">
-                          <div className="flex items-center gap-2">
-                            <CreditCard className="h-4 w-4" />
-                            Credit/Debit Card (Via Paystack)
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
                     <Label>Your Name (Optional)</Label>
                     <Input
                       placeholder="Enter your name"
@@ -694,15 +624,7 @@ export default function EventPage() {
                     />
                   </div>
 
-                  {paymentMethod === "mpesa" && (
-                    <PhoneInput
-                      value={phoneNumber}
-                      onChange={setPhoneNumber}
-                      label="Your M-Pesa Number"
-                      placeholder="0708374149 (test) or your number"
-                      required
-                    />
-                  )}
+                  {/* M-Pesa Number Input - REMOVED */}
 
                   <div className="space-y-2">
                     <Label>Gift Message (Optional)</Label>
@@ -718,7 +640,7 @@ export default function EventPage() {
                     className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                     onClick={handleGiftSubmit}
                     disabled={
-                      !paymentMethod || !giftEmail || isProcessing || (paymentMethod === "mpesa" && !phoneNumber)
+                      !selectedPackage || isProcessing || (giftEmail === "" && !isProcessing)
                     }
                   >
                     {isProcessing ? (

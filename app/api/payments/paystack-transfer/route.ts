@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
     const recipient_code = recipientData.data.recipient_code
 
     // 2. Initiate transfer
+    // The amount provided should already have 20 Ksh + 3% developer share deducted before calling this API.
     const transferData = {
       source: "balance",
       amount: amount * 100, // Amount in kobo

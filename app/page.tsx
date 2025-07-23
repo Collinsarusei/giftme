@@ -1,16 +1,16 @@
+// app/page.tsx (Updated Features Section)
 "use client"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Gift, Heart, PartyPopper, Sparkles, Search, User } from "lucide-react"
+import { Gift, Heart, PartyPopper, Sparkles, Search, User, CreditCard } from "lucide-react" // Added CreditCard
 import Link from "next/link"
 import Image from "next/image"
 import { useEffect, useState } from "react"
 import { Input } from "@/components/ui/input"
 
-// Utilities
-const isDataUrl = (url?: string) => typeof url === "string" && (url.startsWith("data:") || url.startsWith("blob:"))
+// ... (rest of the component is the same)
 
 const HomePage = () => {
   const [sampleEvents, setSampleEvents] = useState<any[]>([])
@@ -18,14 +18,26 @@ const HomePage = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
 
-  // Filter events based on search query
+  // ... (useEffect and other functions remain the same)
+  
+  // Filter events based on search query and expiration
   const filteredEvents = sampleEvents.filter(
     (event: any) =>
-      event.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      event.type?.toLowerCase().includes(searchQuery.toLowerCase()),
+      (event.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.type?.toLowerCase().includes(searchQuery.toLowerCase())) &&
+      event.status === "active" &&
+      new Date(event.expiresAt) >= new Date()
   )
 
   useEffect(() => {
+    // Check for current user from localStorage
+    if (typeof window !== "undefined") {
+      const user = localStorage.getItem("currentUser")
+      if (user) {
+        setCurrentUser(JSON.parse(user))
+      }
+    }
+
     async function fetchEvents() {
       setIsLoading(true)
       try {
@@ -37,27 +49,20 @@ const HomePage = () => {
         } else {
           setSampleEvents([])
         }
-    } catch (error) {
-      console.error("Error loading events:", error)
-      setSampleEvents([])
-    } finally {
-      setIsLoading(false)
-    }
+      } catch (error) {
+        console.error("Error loading events:", error)
+        setSampleEvents([])
+      } finally {
+        setIsLoading(false)
+      }
     }
     fetchEvents()
   }, [])
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-purple-600"></div>
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50">
-      {/* Header */}
+      {/* Header, Hero, Search, Sample Events... (Keep as is) */}
       <header className="container mx-auto px-4 py-6 flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Gift className="h-8 w-8 text-purple-600" />
@@ -101,7 +106,7 @@ const HomePage = () => {
           </h1>
           <p className="text-lg sm:text-xl text-gray-600 mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
             Create beautiful event pages for birthdays, graduations, weddings, and more. Let friends and family
-            celebrate with you by sending monetary gifts via M-Pesa or card payments.
+            celebrate with you by sending monetary gifts securely.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4">
             <Link href={currentUser ? "/create" : "/auth"}>
@@ -153,15 +158,6 @@ const HomePage = () => {
             {filteredEvents.map((event: any) => (
               <Card key={event.id} className="overflow-hidden hover:shadow-lg transition-shadow duration-300 group">
                 <div className="relative">
-                  {isDataUrl(event.images?.[0]) ? (
-                    <img
-                      src={event.images?.[0] || "/placeholder.svg"}
-                      alt={event.name || "Event"}
-                      width={300}
-                      height={200}
-                      className="w-full h-40 sm:h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  ) : (
                     <Image
                       src={event.images?.[0] || "/placeholder.svg?height=200&width=300"}
                       alt={event.name || "Event"}
@@ -170,7 +166,6 @@ const HomePage = () => {
                       unoptimized
                       className="w-full h-40 sm:h-48 object-cover group-hover:scale-105 transition-transform duration-300"
                     />
-                  )}
                   <div className="absolute top-3 sm:top-4 left-3 sm:left-4 bg-purple-500 p-1.5 sm:p-2 rounded-full">
                     <PartyPopper className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                   </div>
@@ -201,9 +196,11 @@ const HomePage = () => {
                       </div>
                     )}
                   </div>
-                  <Link href={`/event/${event.id}`}>
-                    <Button className="w-full mt-4 bg-transparent text-sm sm:text-base" variant="outline">
-                      View Event Page
+                  <Link href={`/event/${event.id}`}
+                    className={event.status === "expired" ? "pointer-events-none opacity-50" : ""}
+                  >
+                    <Button className="w-full mt-4 bg-transparent text-sm sm:text-base" variant="outline" disabled={event.status === "expired"}>
+                      {event.status === "expired" ? "Event Expired" : "View Event Page"}
                     </Button>
                   </Link>
                 </CardContent>
@@ -230,7 +227,6 @@ const HomePage = () => {
         )}
       </section>
 
-      {/* Features Section */}
       <section className="bg-white py-16">
         <div className="container mx-auto px-4">
           <div className="text-center mb-12">
@@ -242,28 +238,29 @@ const HomePage = () => {
                 <Sparkles className="h-8 w-8 text-purple-600" />
               </div>
               <h3 className="text-xl font-semibold mb-2">Easy Setup</h3>
-              <p className="text-gray-600">Create your event page in minutes with our simple form</p>
+              <p className="text-gray-600">Create your event page in minutes with our simple form.</p>
             </div>
             <div className="text-center">
               <div className="bg-pink-100 p-4 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                <Gift className="h-8 w-8 text-pink-600" />
+                <CreditCard className="h-8 w-8 text-pink-600" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">Multiple Payment Options</h3>
-              <p className="text-gray-600">Accept gifts via M-Pesa (direct) and card payments (via Paystack)</p>
+              <h3 className="text-xl font-semibold mb-2">Secure Payments</h3>
+              <p className="text-gray-600">Accept gifts via credit/debit card, powered by Paystack.</p>
             </div>
             <div className="text-center">
               <div className="bg-yellow-100 p-4 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
                 <Heart className="h-8 w-8 text-yellow-600" />
               </div>
               <h3 className="text-xl font-semibold mb-2">Share Anywhere</h3>
-              <p className="text-gray-600">Share your event link on WhatsApp, Facebook, Instagram</p>
+              <p className="text-gray-600">Easily share your event link on WhatsApp, Facebook, and Instagram.</p>
             </div>
           </div>
         </div>
       </section>
-
-      {/* CTA Section */}
-      <section className="container mx-auto px-4 py-16 text-center">
+      
+      {/* CTA and Footer... (Keep as is) */}
+       {/* CTA Section */}
+       <section className="container mx-auto px-4 py-16 text-center">
         <div className="max-w-2xl mx-auto">
           <h2 className="text-3xl font-bold mb-4">Ready to Create Your Event?</h2>
           <p className="text-gray-600 mb-8">

@@ -1,528 +1,346 @@
+// app/dashboard/page.tsx
 "use client"
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Gift, Eye, Calendar, DollarSign, Copy, CheckCircle, ExternalLink, Download } from "lucide-react"
+import { Gift, Eye, Calendar, DollarSign, Wallet, Download, Trash2 } from "lucide-react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 
 export default function DashboardPage() {
+  const searchParams = useSearchParams()
+  const withdrawalEventId = searchParams?.get("withdrawal")
+
   const [userEvents, setUserEvents] = useState<any[]>([])
   const [selectedEventId, setSelectedEventId] = useState<string>("")
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
-  const [isAuthorized, setIsAuthorized] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [totalEarnings, setTotalEarnings] = useState(0)
+  const [totalReceived, setTotalReceived] = useState(0)
   const [totalGifts, setTotalGifts] = useState(0)
   const [totalViews, setTotalViews] = useState(0)
-  const [recentGifts, setRecentGifts] = useState<any[]>([])
-  const [copied, setCopied] = useState("")
-  const [paystackGifts, setPaystackGifts] = useState<any[]>([])
-  const [isWithdrawing, setIsWithdrawing] = useState<string>("")
+  const [availableBalance, setAvailableBalance] = useState(0)
+  const [isWithdrawing, setIsWithdrawing] = useState(false)
+  const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const [withdrawalMessage, setWithdrawalMessage] = useState("")
 
+  const DEV_FEE_PERCENTAGE = 0.03 // 3%
+  const PAYSTACK_TRANSFER_FEE_KES = 20 // KES
+
+  // ... (useEffect and other functions remain the same)
   useEffect(() => {
     async function fetchUserEvents() {
       setIsLoading(true)
+      let currentUser = null
+      if (typeof window !== "undefined") {
+        currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}")
+      }
+
+      if (!currentUser || !currentUser.username) {
+        setIsLoading(false)
+        return
+      }
+
       try {
-        // Get current user from localStorage (can be migrated to context/auth later)
-        let currentUser = null
-        if (typeof window !== "undefined") {
-          currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}")
-        }
-        if (!currentUser || !currentUser.username) {
-          setIsAuthorized(false)
-          setIsLoading(false)
-          return
-        }
-        setIsAuthorized(true)
-        // Fetch user's events from API
         const res = await fetch(`/api/events?createdBy=${currentUser.username}`)
         const data = await res.json()
         if (data.success) {
-          const myEvents = data.events
+          const myEvents = data.events.filter((event: any) => event.status !== 'cancelled')
           setUserEvents(myEvents)
-          // Set the first event as selected by default
-          if (myEvents.length > 0) {
-            setSelectedEventId(myEvents[0].id)
-            setSelectedEvent(myEvents[0])
+
+          let initialSelectedEvent = null
+          if (withdrawalEventId) {
+            initialSelectedEvent = myEvents.find((e: any) => e.id === withdrawalEventId)
+          } else if (myEvents.length > 0) {
+            initialSelectedEvent = myEvents[0]
           }
-          // Calculate totals for all events
-          const earnings = myEvents.reduce((sum, event) => sum + (event.raised || 0), 0)
-          const gifts = myEvents.reduce((sum, event) => sum + (event.giftCount || 0), 0)
-          const views = myEvents.reduce((sum, event) => sum + (event.views || 0), 0)
-          setTotalEarnings(earnings)
+
+          if (initialSelectedEvent) {
+            setSelectedEventId(initialSelectedEvent.id)
+            setSelectedEvent(initialSelectedEvent)
+          }
+
+          const earnings = myEvents.reduce((sum: number, event: any) => sum + (event.raised || 0), 0)
+          const gifts = myEvents.reduce((sum: number, event: any) => sum + (event.giftCount || 0), 0)
+          const views = myEvents.reduce((sum: number, event: any) => sum + (event.views || 0), 0)
+          setTotalReceived(earnings)
           setTotalGifts(gifts)
           setTotalViews(views)
-          // Get recent gifts from all events
-          const allGifts = myEvents
-            .flatMap((event) =>
-              (event.gifts || []).map((gift) => ({
-                ...gift,
-                eventName: event.name,
-                eventId: event.id,
-              }))
-            )
-            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-          setRecentGifts(allGifts.slice(0, 10))
-          // Get Paystack gifts that need withdrawal
-          const paystackPendingGifts = allGifts.filter(
-            (gift) => gift.paymentMethod === "paystack" && gift.status === "pending_withdrawal"
-          )
-          setPaystackGifts(paystackPendingGifts)
-        } else {
-          setUserEvents([])
-          setIsAuthorized(false)
         }
       } catch (error) {
         console.error("Error loading dashboard:", error)
-        setIsAuthorized(false)
       } finally {
         setIsLoading(false)
       }
     }
     fetchUserEvents()
-  }, [])
+  }, [withdrawalEventId])
 
-  // Handle event selection change
+  useEffect(() => {
+    if (selectedEvent) {
+      const eventPendingGifts = selectedEvent.gifts.filter(
+        (gift: any) => gift.paymentMethod === "paystack" && gift.status === "pending_withdrawal"
+      )
+      const balance = eventPendingGifts.reduce((sum: number, gift: any) => sum + gift.amount, 0)
+      setAvailableBalance(balance)
+    } else {
+      setAvailableBalance(0)
+    }
+  }, [selectedEvent])
+
   const handleEventChange = (eventId: string) => {
     setSelectedEventId(eventId)
     const event = userEvents.find((e) => e.id === eventId)
     setSelectedEvent(event)
   }
 
-  const copyEventLink = (eventId: string) => {
-    if (typeof window === "undefined") return
-
-    const link = `${window.location.origin}/event/${eventId}`
-    navigator.clipboard.writeText(link)
-    setCopied(eventId)
-    setTimeout(() => setCopied(""), 2000)
+  const handleDeleteEvent = async (eventId: string) => {
+    setIsDeleting(eventId)
+    try {
+      const res = await fetch(`/api/events/${eventId}/delete`, { method: "DELETE" })
+      const data = await res.json()
+      if (data.success) {
+        setUserEvents(prevEvents => prevEvents.filter(e => e.id !== eventId))
+        if(selectedEventId === eventId) {
+            setSelectedEvent(null)
+            setSelectedEventId("")
+        }
+      } else {
+        alert(data.message)
+      }
+    } catch (error) {
+      console.error("Delete error:", error)
+      alert("An error occurred while deleting the event.")
+    } finally {
+      setIsDeleting(null)
+    }
   }
 
-  // Update withdrawal to use API
-  const handlePaystackWithdrawal = async (giftId: string | "all", eventId?: string) => {
-    setIsWithdrawing(giftId)
+  const handlePaystackWithdrawal = async () => {
+    if (!selectedEvent || availableBalance <= 0) return
+
+    setIsWithdrawing(true)
+    setWithdrawalMessage("Initiating withdrawal...")
+
+    const netAmountAfterDevFee = availableBalance * (1 - DEV_FEE_PERCENTAGE)
+    const finalPayout = netAmountAfterDevFee - PAYSTACK_TRANSFER_FEE_KES
+
+    if (finalPayout <= 0) {
+      setWithdrawalMessage("❌ Net withdrawal amount is too low after fees.")
+      setIsWithdrawing(false)
+      return
+    }
+
     try {
-      if (giftId === "all" && selectedEvent) {
-        // Bulk withdrawal: sum all pending Paystack gifts for this event
-        const gifts = paystackGifts.filter(g => g.eventId === selectedEvent.id)
-        const totalAmount = gifts.reduce((sum, g) => sum + g.amount, 0)
-        const totalFees = gifts.reduce((sum, g) => sum + (20 + Math.ceil(g.amount * 0.03)), 0)
-        const netAmount = totalAmount - totalFees
-        if (netAmount <= 0) {
-          alert("Net withdrawal amount is too low after fees.")
-          setIsWithdrawing("")
-          return
-        }
-        // Call backend to process bulk withdrawal
-        const res = await fetch("/api/payments/paystack-transfer", {
-          method: "POST",
+        const giftIdsToWithdraw = selectedEvent.gifts
+            .filter((g: any) => g.status === 'pending_withdrawal')
+            .map((g: any) => g.id);
+
+      const res = await fetch("/api/payments/paystack-transfer", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            amount: netAmount,
-            name: selectedEvent.creatorName,
-            mpesaNumber: selectedEvent.mpesaNumber,
-            reason: `Bulk withdrawal for event ${selectedEvent.name}`,
+          amount: finalPayout,
+          name: selectedEvent.creatorName,
+          mpesaNumber: selectedEvent.mpesaNumber,
+          reason: `Withdrawal for ${selectedEvent.name}`,
+          giftIds: giftIdsToWithdraw,
+          eventId: selectedEvent.id,
         }),
       })
       const data = await res.json()
       if (data.success) {
-          window.location.reload()
-          alert("✅ Bulk withdrawal successful! Money has been sent to your M-Pesa number.")
-        } else {
-          alert("❌ Bulk withdrawal failed. Please try again.")
-        }
+        setWithdrawalMessage("✅ Withdrawal successful! Check your M-Pesa.")
+        // Refresh data
+        const updatedEvents = userEvents.map(event => 
+            event.id === selectedEvent.id 
+                ? { ...event, gifts: event.gifts.map((g: any) => giftIdsToWithdraw.includes(g.id) ? {...g, status: 'withdrawn'} : g) }
+                : event
+        );
+        setUserEvents(updatedEvents);
+        setSelectedEvent(updatedEvents.find(e => e.id === selectedEvent.id));
+
       } else {
-        // Individual withdrawal (legacy, for single gifts)
-        const gift = paystackGifts.find(g => g.id === giftId)
-        if (!gift || !selectedEvent) {
-          alert("Gift or event not found.")
-          setIsWithdrawing("")
-          return
-        }
-        const fee = 20 + Math.ceil(gift.amount * 0.03)
-        const netAmount = gift.amount - fee
-        if (netAmount <= 0) {
-          alert("Net withdrawal amount is too low after fees.")
-          setIsWithdrawing("")
-          return
-        }
-        const res = await fetch("/api/payments/paystack-transfer", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount: netAmount,
-            name: selectedEvent.creatorName,
-            mpesaNumber: selectedEvent.mpesaNumber,
-            reason: `Withdrawal for event ${selectedEvent.name}`,
-          }),
-        })
-        const data = await res.json()
-        if (data.success) {
-        window.location.reload()
-          alert("✅ Withdrawal successful! Money has been sent to your M-Pesa number.")
-      } else {
-        alert("❌ Withdrawal failed. Please try again.")
-        }
+        setWithdrawalMessage(`❌ Withdrawal failed: ${data.message}`)
       }
     } catch (error) {
-      alert("❌ Withdrawal failed. Please try again.")
+      setWithdrawalMessage("❌ An unexpected error occurred.")
     } finally {
-      setIsWithdrawing("")
+      setIsWithdrawing(false)
+      setTimeout(() => setWithdrawalMessage(""), 5000)
     }
   }
 
-  const formatTimeAgo = (timestamp: string) => {
-    const now = new Date()
-    const time = new Date(timestamp)
-    const diffInHours = Math.floor((now.getTime() - time.getTime()) / (1000 * 60 * 60))
 
-    if (diffInHours < 1) return "Just now"
-    if (diffInHours < 24) return `${diffInHours} hours ago`
-    return `${Math.floor(diffInHours / 24)} days ago`
-  }
+  const getStatusVariant = (status: string) => {
+    switch (status) {
+      case 'withdrawn':
+        return 'default'; // Or another variant that looks like success
+      case 'pending_withdrawal':
+        return 'secondary';
+      default:
+        return 'outline';
+    }
+  };
 
-  // Show loading spinner
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-purple-600"></div>
       </div>
     )
   }
 
-  // Show unauthorized message
-  if (!isAuthorized) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
-          <p className="text-gray-600 mb-4">You need to create an event first to access the dashboard</p>
-          <Link href="/create">
-            <Button>Create Your Event</Button>
-          </Link>
-        </div>
-      </div>
-    )
-  }
+  const developerFee = availableBalance * DEV_FEE_PERCENTAGE
+  const finalPayout = availableBalance - developerFee - PAYSTACK_TRANSFER_FEE_KES
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50">
-      {/* Header */}
       <header className="bg-white shadow-sm">
-        <div className="container mx-auto px-4 py-4 sm:py-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                Dashboard
-              </h1>
-              <p className="text-gray-600 text-sm sm:text-base">Manage your events and track your gifts</p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-              <Link href="/create">
-                <Button className="w-full sm:w-auto bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-sm sm:text-base">
-                  Create New Event
-                </Button>
-              </Link>
-              <Link href="/">
-                <Button variant="outline" className="w-full sm:w-auto text-sm sm:text-base bg-transparent">
-                  Home
-                </Button>
-              </Link>
-            </div>
-          </div>
+        <div className="container mx-auto px-4 py-6">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            Creator Dashboard
+          </h1>
         </div>
       </header>
 
-      <div className="container mx-auto px-4 py-6 sm:py-8">
-        {/* Paystack Withdrawal Section */}
-        {paystackGifts.length > 0 && (
-          <div className="mb-6">
-            <Card className="border-orange-200 bg-orange-50">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-orange-800">
-                  <Download className="h-5 w-5" />
-                  Paystack Withdrawals Available
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <p className="text-sm text-orange-700 mb-4">
-                    You have {paystackGifts.length} gift(s) from Paystack that can be withdrawn to your bank account.
-                  </p>
-                  {paystackGifts.map((gift) => (
-                    <div key={gift.id} className="flex items-center justify-between p-3 bg-white rounded-lg">
-                      <div>
-                        <p className="font-semibold">
-                          {gift.from} - KES {gift.amount}
-                        </p>
-                        <p className="text-sm text-gray-600">From: {gift.eventName}</p>
-                        <p className="text-xs text-gray-500">{formatTimeAgo(gift.timestamp)}</p>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => handlePaystackWithdrawal(gift.id, gift.eventId)}
-                        disabled={isWithdrawing === gift.id}
-                        className="bg-orange-600 hover:bg-orange-700"
-                      >
-                        {isWithdrawing === gift.id ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Withdrawing...
-                          </>
-                        ) : (
-                          <>
-                            <Download className="h-4 w-4 mr-2" />
-                            Withdraw
-                          </>
-                        )}
-                      </Button>
-                    </div>
+      <div className="container mx-auto px-4 py-8">
+        {userEvents.length > 0 ? (
+          <>
+            <div className="mb-6">
+              <Select value={selectedEventId} onValueChange={handleEventChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an event to manage" />
+                </SelectTrigger>
+                <SelectContent>
+                  {userEvents.map((event) => (
+                    <SelectItem key={event.id} value={event.id}>
+                      {event.name}
+                    </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedEvent && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Event Stats */}
+                <div className="md:col-span-2 space-y-6">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>{selectedEvent.name}</CardTitle>
+                            <CardDescription>Event Status: <Badge>{selectedEvent.status}</Badge></CardDescription>
+                        </CardHeader>
+                        <CardContent className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="text-center"><DollarSign className="mx-auto h-6 w-6 text-green-500"/><p className="font-bold text-lg">{selectedEvent.raised.toLocaleString()}</p><p className="text-sm text-gray-500">Raised</p></div>
+                            <div className="text-center"><Gift className="mx-auto h-6 w-6 text-blue-500"/><p className="font-bold text-lg">{selectedEvent.giftCount}</p><p className="text-sm text-gray-500">Gifts</p></div>
+                            <div className="text-center"><Eye className="mx-auto h-6 w-6 text-purple-500"/><p className="font-bold text-lg">{selectedEvent.views}</p><p className="text-sm text-gray-500">Views</p></div>
+                            <div className="text-center"><Calendar className="mx-auto h-6 w-6 text-orange-500"/><p className="font-bold text-lg">{new Date(selectedEvent.date).toLocaleDateString()}</p><p className="text-sm text-gray-500">Date</p></div>
+                        </CardContent>
+                        <CardFooter className="flex justify-between">
+                            <Link href={`/event/${selectedEvent.id}`} passHref>
+                                <Button variant="outline">View Event Page</Button>
+                            </Link>
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                <Button variant="destructive" disabled={isDeleting === selectedEvent.id}>
+                                    {isDeleting === selectedEvent.id ? 'Deleting...' : <><Trash2 className="mr-2 h-4 w-4"/> Delete Event</>}
+                                </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                    This action cannot be undone. This will permanently delete the event and all its data.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction onClick={() => handleDeleteEvent(selectedEvent.id)}>Continue</AlertDialogAction>
+                                </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        </CardFooter>
+                    </Card>
+                    
+                    {/* Gift List */}
+                    <Card>
+                        <CardHeader><CardTitle>Gifts Received</CardTitle></CardHeader>
+                        <CardContent>
+                            <div className="space-y-2 max-h-96 overflow-y-auto">
+                                {selectedEvent.gifts.length > 0 ? selectedEvent.gifts.map((gift: any) => (
+                                    <div key={gift.id} className="p-2 border rounded-md flex justify-between items-center">
+                                        <div>
+                                            <p className="font-semibold">{gift.from} - KES {gift.amount}</p>
+                                            <p className="text-sm text-gray-500">{gift.message}</p>
+                                        </div>
+                                        <Badge variant={getStatusVariant(gift.status)}>{gift.status.replace('_', ' ')}</Badge>
+                                    </div>
+                                )) : <p>No gifts received for this event yet.</p>}
+                            </div>
+                        </CardContent>
+                    </Card>
+
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
 
-        {/* Event Selector - Show even with one event for consistency */}
-        {userEvents.length > 0 && (
-          <div className="mb-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  {userEvents.length === 1 ? "Your Event" : "Switch Between Your Events"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Select value={selectedEventId} onValueChange={handleEventChange}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select an event to view details" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {userEvents.map((event) => (
-                      <SelectItem key={event.id} value={event.id}>
-                        <div className="flex items-center justify-between w-full">
-                          <span>{event.name}</span>
-                          <Badge variant="outline" className="ml-2">
-                            KES {(event.raised || 0).toLocaleString()}
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Stats Overview - Show overall stats or selected event stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-6 sm:mb-8">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">{selectedEvent ? "Event" : "Total"} Received</p>
-                  <p className="text-lg sm:text-2xl font-bold text-green-600">
-                    KES {(selectedEvent ? selectedEvent.raised || 0 : totalEarnings).toLocaleString()}
-                  </p>
-                  <p className="text-xs text-gray-500 hidden sm:block">Sent directly to your M-Pesa</p>
-                </div>
-                <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-green-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">{selectedEvent ? "Event" : "Total"} Gifts</p>
-                  <p className="text-lg sm:text-2xl font-bold text-blue-600">
-                    {selectedEvent ? selectedEvent.giftCount || 0 : totalGifts}
-                  </p>
-                </div>
-                <Gift className="h-6 w-6 sm:h-8 sm:w-8 text-blue-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">{selectedEvent ? "Event" : "Total"} Views</p>
-                  <p className="text-lg sm:text-2xl font-bold text-purple-600">
-                    {selectedEvent ? selectedEvent.views || 0 : totalViews}
-                  </p>
-                </div>
-                <Eye className="h-6 w-6 sm:h-8 sm:w-8 text-purple-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs sm:text-sm text-gray-600">Active Events</p>
-                  <p className="text-lg sm:text-2xl font-bold text-orange-600">{userEvents.length}</p>
-                </div>
-                <Calendar className="h-6 w-6 sm:h-8 sm:w-8 text-orange-500" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Tabs defaultValue="events" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="events">My Events</TabsTrigger>
-            <TabsTrigger value="gifts">Recent Gifts</TabsTrigger>
-          </TabsList>
-
-          {/* Events Tab */}
-          <TabsContent value="events">
-            <div className="space-y-6">
-              {userEvents.length > 0 ? (
-                userEvents.map((event) => (
-                  <Card key={event.id} className={selectedEvent?.id === event.id ? "ring-2 ring-purple-500" : ""}>
+                {/* Withdrawal Card */}
+                <div className="space-y-6">
+                  <Card>
                     <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <CardTitle className="flex items-center gap-2">
-                            {event.name}
-                            <Badge variant="default">Active</Badge>
-                            {selectedEvent?.id === event.id && <Badge variant="secondary">Currently Viewing</Badge>}
-                          </CardTitle>
-                          <p className="text-gray-600">
-                            {event.type} • {new Date(event.date).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <div className="flex gap-2">
-                          <Link href={`/event/${event.id}`}>
-                            <Button variant="outline" size="sm">
-                              <ExternalLink className="h-4 w-4 mr-2" />
-                              View Page
-                            </Button>
-                          </Link>
-                          <Button variant="outline" size="sm" onClick={() => copyEventLink(event.id)}>
-                            {copied === event.id ? (
-                              <CheckCircle className="h-4 w-4 mr-2" />
-                            ) : (
-                              <Copy className="h-4 w-4 mr-2" />
-                            )}
-                            {copied === event.id ? "Copied!" : "Copy Link"}
-                          </Button>
-                        </div>
-                      </div>
+                      <CardTitle className="flex items-center"><Wallet className="mr-2"/> Withdrawal</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-green-600">
-                            KES {(event.raised || 0).toLocaleString()}
-                          </p>
-                          <p className="text-sm text-gray-600">Raised</p>
+                        <div className="space-y-4">
+                            <div>
+                                <p className="text-sm text-gray-500">Available Balance</p>
+                                <p className="text-2xl font-bold">KES {availableBalance.toLocaleString()}</p>
+                            </div>
+                            <div className="p-3 bg-gray-50 rounded-md text-sm space-y-1">
+                                <div className="flex justify-between"><span>3% Developer Fee:</span><span>- KES {developerFee.toFixed(2)}</span></div>
+                                <div className="flex justify-between"><span>Paystack Transfer Fee:</span><span>- KES {PAYSTACK_TRANSFER_FEE_KES.toFixed(2)}</span></div>
+                                <hr/>
+                                <div className="flex justify-between font-bold"><span>Final Payout:</span><span>KES {finalPayout > 0 ? finalPayout.toFixed(2) : '0.00'}</span></div>
+                            </div>
+                            <Button onClick={handlePaystackWithdrawal} disabled={isWithdrawing || finalPayout <= 0} className="w-full">
+                                {isWithdrawing ? 'Withdrawing...' : <><Download className="mr-2 h-4 w-4"/> Withdraw Funds</>}
+                            </Button>
+                            {withdrawalMessage && <p className="text-center text-sm font-semibold mt-2">{withdrawalMessage}</p>}
                         </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-blue-600">{event.giftCount || 0}</p>
-                          <p className="text-sm text-gray-600">Gifts</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-purple-600">{event.views || 0}</p>
-                          <p className="text-sm text-gray-600">Views</p>
-                        </div>
-                        <div className="text-center">
-                          <p className="text-2xl font-bold text-orange-600">{event.shares || 0}</p>
-                          <p className="text-sm text-gray-600">Shares</p>
-                        </div>
-                      </div>
-
-                      {/* Progress Bar - Only show if goal exists */}
-                      {event.goal && (
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span>Progress to Goal</span>
-                            <span>{Math.round(((event.raised || 0) / event.goal) * 100)}%</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                              className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full"
-                              style={{ width: `${Math.min(((event.raised || 0) / event.goal) * 100, 100)}%` }}
-                            ></div>
-                          </div>
-                          <p className="text-sm text-gray-600">Goal: KES {event.goal.toLocaleString()}</p>
-                        </div>
-                      )}
                     </CardContent>
                   </Card>
-                ))
-              ) : (
-                <Card>
-                  <CardContent className="p-12 text-center">
-                    <Calendar className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-xl font-semibold text-gray-600 mb-2">No Events Yet</h3>
-                    <p className="text-gray-500 mb-6">Create your first event to start receiving gifts</p>
-                    <Link href="/create">
-                      <Button className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">
-                        Create Your First Event
-                      </Button>
-                    </Link>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-
-          {/* Gifts Tab */}
-          <TabsContent value="gifts">
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Gifts {selectedEvent && `for ${selectedEvent.name}`}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {recentGifts.length > 0 ? (
-                  <div className="space-y-4">
-                    {recentGifts
-                      .filter((gift) => !selectedEvent || gift.eventName === selectedEvent.name)
-                      .map((gift, index) => (
-                        <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className="font-semibold">{gift.from}</p>
-                              <Badge variant="outline" className="text-xs">
-                                KES {gift.amount}
-                              </Badge>
-                              {gift.paymentMethod === "paystack" && (
-                                <Badge variant="secondary" className="text-xs">
-                                  {gift.status === "pending_withdrawal" ? "Pending Withdrawal" : gift.status}
-                                </Badge>
-                              )}
-                            </div>
-                            <p className="text-sm text-gray-600 mb-1">For: {gift.eventName}</p>
-                            {gift.message && <p className="text-sm text-gray-600 mb-1">"{gift.message}"</p>}
-                            <p className="text-xs text-gray-500">{formatTimeAgo(gift.timestamp)}</p>
-                          </div>
-                          <Gift className="h-5 w-5 text-purple-500" />
-                        </div>
-                      ))}
-                  </div>
-                ) : (
-                  <div className="text-center text-gray-500 py-8">
-                    <Gift className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No gifts received yet</p>
-                    <p className="text-sm">Share your event links to start receiving gifts</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-center">
+            <h2 className="text-xl font-semibold">No events found.</h2>
+            <p className="text-gray-600">Create an event to get started.</p>
+            <Link href="/create" passHref>
+                <Button className="mt-4">Create Event</Button>
+            </Link>
+          </div>
+        )}
       </div>
     </div>
   )

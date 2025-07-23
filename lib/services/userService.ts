@@ -1,3 +1,4 @@
+// lib/services/userService.ts
 import { getCollection } from "../mongodb"
 import type { User, CreateUserData } from "../models/User"
 import { ObjectId } from "mongodb"
@@ -9,19 +10,16 @@ export class UserService {
   static async createUser(userData: CreateUserData): Promise<User> {
     const collection = await getCollection(this.collectionName)
 
-    // Check if username already exists
     const existingUser = await collection.findOne({ username: userData.username })
     if (existingUser) {
       throw new Error("Username already exists")
     }
 
-    // Check if email already exists
     const existingEmail = await collection.findOne({ email: userData.email })
     if (existingEmail) {
       throw new Error("Email already exists")
     }
 
-    // Hash the password
     const hashedPassword = await bcrypt.hash(userData.password, 10)
 
     const newUser: User = {
@@ -38,20 +36,31 @@ export class UserService {
     return { ...newUser, _id: result.insertedId }
   }
 
-  static async getUserByCredentials(username: string, password: string): Promise<User | null> {
+  static async verifyUserCredentials(identifier: string, password_candidate: string): Promise<User | null> {
     const collection = await getCollection(this.collectionName)
-    const result = await collection.findOne({ username })
-    if (!result) return null
-    const isMatch = await bcrypt.compare(password, result.password)
-    if (!isMatch) return null
-    const { _id, password: _pw, ...user } = result
-    return user as User
+    const user = await collection.findOne({
+      $or: [{ username: { $regex: `^${identifier}$`, $options: "i" } }, { email: { $regex: `^${identifier}$`, $options: "i" } }],
+    })
+
+    if (!user) {
+      return null
+    }
+
+    const isMatch = await bcrypt.compare(password_candidate, user.password)
+    if (!isMatch) {
+      return null
+    }
+
+    const { _id, password, ...userWithoutPassword } = user
+    return userWithoutPassword as User
   }
 
   static async findUserByUsername(username: string): Promise<User | null> {
     const collection = await getCollection(this.collectionName)
     const result = await collection.findOne({ username: { $regex: `^${username}$`, $options: "i" } })
-    if (!result) return null
+    if (!result) {
+        return null
+    }
     const { _id, ...user } = result
     return user as User
   }
@@ -59,28 +68,9 @@ export class UserService {
   static async findUserByEmail(email: string): Promise<User | null> {
     const collection = await getCollection(this.collectionName)
     const result = await collection.findOne({ email: { $regex: `^${email}$`, $options: "i" } })
-    if (!result) return null
-    const { _id, ...user } = result
-    return user as User
-  }
-
-  static async findUserByUsernameOrEmail(username: string, email: string): Promise<User | null> {
-    const collection = await getCollection(this.collectionName)
-    const result = await collection.findOne({
-      $or: [
-        { username: { $regex: `^${username}$`, $options: "i" } },
-        { email: { $regex: `^${email}$`, $options: "i" } },
-      ],
-    })
-    if (!result) return null
-    const { _id, ...user } = result
-    return user as User
-  }
-
-  static async getUserByUsername(username: string): Promise<User | null> {
-    const collection = await getCollection(this.collectionName)
-    const result = await collection.findOne({ username })
-    if (!result) return null
+    if (!result) {
+        return null
+    }
     const { _id, ...user } = result
     return user as User
   }

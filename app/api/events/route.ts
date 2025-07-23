@@ -9,10 +9,13 @@ export async function GET(request: NextRequest) {
     let events
 
     if (createdBy) {
+      // For creator dashboard, show all events (active, completed, cancelled, expired)
       events = await EventService.getEventsByCreator(createdBy)
     } else if (query) {
+      // For search, only show active events (already handled in EventService.searchEvents)
       events = await EventService.searchEvents(query)
     } else {
+      // For homepage, only show active, non-expired events
       events = await EventService.getAllActiveEvents(6)
     }
 
@@ -46,7 +49,13 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({
             to: event.createdBy,
             subject: `Your event '${event.name}' has expired - Withdraw your pending gifts`,
-            message: `Hi,\n\nYour event '${event.name}' has expired. You have pending Paystack withdrawals. Please use the following private link to access your withdrawal page:\n\n${process.env.NEXT_PUBLIC_BASE_URL}/dashboard?withdrawal=${event.id}\n\nThank you for using CelebrateWith.me!`,
+            message: `Hi,
+
+Your event '${event.name}' has expired. You have pending Paystack withdrawals. Please use the following private link to access your withdrawal page:
+
+${process.env.NEXT_PUBLIC_BASE_URL}/dashboard?withdrawal=${event.id}
+
+Thank you for using CelebrateWith.me!`,
           }),
         })
       }
@@ -56,4 +65,4 @@ export async function POST(request: NextRequest) {
     console.error("Expire events error:", error)
     return NextResponse.json({ success: false, message: "Failed to expire events" }, { status: 500 })
   }
-} 
+}

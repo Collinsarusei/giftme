@@ -1,10 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { EventService } from "@/lib/services/eventService"
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || "sk_test_302d1221c06cb6c10f842bc4883282c684c52dee"
 
 export async function POST(request: NextRequest) {
   try {
-    const { amount, name, mpesaNumber, reason } = await request.json()
+    const { amount, name, mpesaNumber, reason, giftIds, eventId } = await request.json()
+
+    if (!Array.isArray(giftIds) || giftIds.length === 0) {
+      return NextResponse.json({ success: false, message: "No gift IDs provided for withdrawal." }, { status: 400 });
+    }
 
     // 1. Create recipient
     const recipientRes = await fetch("https://api.paystack.co/transferrecipient", {
@@ -28,7 +33,6 @@ export async function POST(request: NextRequest) {
     const recipient_code = recipientData.data.recipient_code
 
     // 2. Initiate transfer
-    // The amount provided should already have 20 Ksh + 3% developer share deducted before calling this API.
     const transferData = {
       source: "balance",
       amount: amount * 100, // Amount in kobo
@@ -47,12 +51,28 @@ export async function POST(request: NextRequest) {
 
     const result = await response.json()
 
-    return NextResponse.json({
-      success: true,
-      data: result.data,
-    })
+    if (result.status) {
+      // Update gift statuses to 'withdrawn' in the database
+      const updateSuccess = await EventService.updateManyGiftStatuses(
+        eventId,
+        giftIds,
+        "withdrawn"
+      );
+
+      if (!updateSuccess) {
+        console.warn("Failed to update gift statuses in DB after successful Paystack transfer.");
+        // Potentially log this for manual review or implement a retry mechanism
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: result.data,
+      })
+    } else {
+      throw new Error(result.message || "Paystack transfer failed")
+    }
   } catch (error) {
     console.error("Paystack transfer error:", error)
-    return NextResponse.json({ success: false, message: "Transfer failed" }, { status: 500 })
+    return NextResponse.json({ success: false, message: (error instanceof Error ? error.message : "Transfer failed") }, { status: 500 })
   }
 }

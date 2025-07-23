@@ -1,3 +1,4 @@
+// lib/services/eventService.ts
 import { getCollection } from "../mongodb"
 import type { Event, CreateEventData, Gift } from "../models/Event"
 
@@ -6,8 +7,10 @@ export class EventService {
 
   static async createEvent(eventData: CreateEventData): Promise<Event> {
     const collection = await getCollection(this.collectionName)
-
     const eventId = `${eventData.createdBy.toLowerCase().replace(/\s+/g, "-")}-${eventData.type.toLowerCase()}-${Date.now()}`
+    const eventDate = new Date(eventData.date)
+    const expiresAt = new Date(eventDate)
+    expiresAt.setDate(eventDate.getDate() + 1)
 
     const newEvent: Event = {
       id: eventId,
@@ -28,6 +31,7 @@ export class EventService {
       createdBy: eventData.createdBy,
       gifts: [],
       status: "active",
+      expiresAt: expiresAt.toISOString(),
     }
 
     const result = await collection.insertOne(newEvent)
@@ -50,7 +54,8 @@ export class EventService {
 
   static async getAllActiveEvents(limit = 10): Promise<Event[]> {
     const collection = await getCollection(this.collectionName)
-    const results = await collection.find({ status: "active" }).sort({ createdAt: -1 }).limit(limit).toArray()
+    const now = new Date().toISOString()
+    const results = await collection.find({ status: "active", expiresAt: { $gte: now } }).sort({ createdAt: -1 }).limit(limit).toArray()
     return results.map(({ _id, ...event }) => event as Event)
   }
 
@@ -60,27 +65,29 @@ export class EventService {
     return result.modifiedCount > 0
   }
 
-  static async addGiftToEvent(eventId: string, gift: Gift): Promise<boolean> {
+  static async addGiftToEvent(eventId: string, gift: Gift, netAmount: number): Promise<boolean> {
     const collection = await getCollection(this.collectionName)
+    // Check if the gift already exists to prevent duplicates from webhook retries
+    const event = await collection.findOne({ id: eventId, "gifts.transactionId": gift.transactionId })
+    if (event) {
+      console.warn(`Attempted to add a duplicate gift with transaction ID ${gift.transactionId}. Ignoring.`)
+      return false
+    }
+
     const result = await collection.updateOne(
       { id: eventId },
       {
         $push: { gifts: gift as any },
         $inc: {
-          raised: gift.amount,
+          raised: netAmount, // Use the netAmount for the 'raised' field
           giftCount: 1,
         },
-      },
+      }
     )
     return result.modifiedCount > 0
   }
 
-  static async updateGiftStatus(
-    eventId: string,
-    giftId: string,
-    status: string,
-    withdrawnAt?: string,
-  ): Promise<boolean> {
+  static async updateGiftStatus(eventId: string, giftId: string, status: string, withdrawnAt?: string): Promise<boolean> {
     const collection = await getCollection(this.collectionName)
     const updateData: any = { "gifts.$.status": status }
     if (withdrawnAt) {
@@ -91,11 +98,26 @@ export class EventService {
     return result.modifiedCount > 0
   }
 
+  static async updateManyGiftStatuses(
+    eventId: string,
+    giftIds: string[],
+    status: "completed" | "pending" | "pending_withdrawal" | "withdrawn",
+  ): Promise<boolean> {
+    const collection = await getCollection(this.collectionName)
+    const result = await collection.updateMany(
+      { id: eventId, "gifts.id": { $in: giftIds } },
+      { $set: { "gifts.$.status": status, "gifts.$.withdrawnAt": new Date().toISOString() } }
+    )
+    return result.modifiedCount > 0
+  }
+
   static async searchEvents(query: string): Promise<Event[]> {
     const collection = await getCollection(this.collectionName)
+    const now = new Date().toISOString()
     const results = await collection
       .find({
         status: "active",
+        expiresAt: { $gte: now },
         $or: [
           { name: { $regex: query, $options: "i" } },
           { type: { $regex: query, $options: "i" } },
@@ -115,17 +137,17 @@ export class EventService {
 
   static async expirePastEvents(): Promise<Event[]> {
     const collection = await getCollection(this.collectionName)
-    // Calculate the date string for (today - 1 day)
-    const now = new Date()
-    const graceDate = new Date(now)
-    graceDate.setDate(now.getDate() - 1)
-    const graceDateStr = graceDate.toISOString().split('T')[0]
-    // Find all active events with date before graceDateStr
-    const expiredEvents = await collection.find({ status: "active", date: { $lt: graceDateStr } }).toArray()
+    const now = new Date().toISOString()
+    const expiredEvents = await collection.find({ status: "active", expiresAt: { $lt: now } }).toArray()
     if (expiredEvents.length > 0) {
-      await collection.updateMany({ status: "active", date: { $lt: graceDateStr } }, { $set: { status: "cancelled" } })
+      await collection.updateMany({ status: "active", expiresAt: { $lt: now } }, { $set: { status: "expired" } })
     }
-    // Remove _id from each event for type safety
     return expiredEvents.map(({ _id, ...rest }) => rest as Event)
+  }
+
+  static async updateEventStatus(eventId: string, status: "active" | "completed" | "cancelled" | "expired"): Promise<boolean> {
+    const collection = await getCollection(this.collectionName)
+    const result = await collection.updateOne({ id: eventId }, { $set: { status: status } })
+    return result.modifiedCount > 0
   }
 }

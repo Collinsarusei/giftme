@@ -3,23 +3,23 @@ import { UserService } from "@/lib/services/userService"
 
 export async function POST(request: NextRequest) {
   try {
-    const { username, password } = await request.json()
+    const { identifier, password } = await request.json()
 
-    if (!username || !password) {
-      return NextResponse.json({ success: false, message: "Username and password are required" }, { status: 400 })
+    if (!identifier || !password) {
+      return NextResponse.json({ success: false, message: "Username/email and password are required" }, { status: 400 })
     }
 
-    const user = await UserService.getUserByCredentials(username, password)
+    const user = await UserService.verifyUserCredentials(identifier, password)
 
     if (!user) {
       return NextResponse.json(
-        { success: false, message: "User not found. Please check your credentials or register first." },
-        { status: 404 },
+        { success: false, message: "Invalid credentials. Please check your username/email and password." },
+        { status: 401 },
       )
     }
 
     // Remove sensitive data before sending to client
-    const { _id, ...userResponse } = user
+    const { _id, password: _pw, ...userResponse } = user
 
     return NextResponse.json({
       success: true,

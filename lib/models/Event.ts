@@ -1,3 +1,4 @@
+// lib/models/Event.ts
 import type { ObjectId } from "mongodb"
 
 export interface Gift {
@@ -12,6 +13,7 @@ export interface Gift {
   status: "completed" | "pending" | "pending_withdrawal" | "withdrawn"
   transactionId?: string
   withdrawnAt?: string
+  developerFee?: number // Added this field
 }
 
 export interface Event {
@@ -33,7 +35,8 @@ export interface Event {
   creatorName: string
   createdBy: string // username of creator
   gifts: Gift[]
-  status: "active" | "completed" | "cancelled"
+  status: "active" | "completed" | "cancelled" | "expired"
+  expiresAt: string 
 }
 
 export interface CreateEventData {

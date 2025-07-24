@@ -291,13 +291,69 @@ export default function EventPage() {
     if (eventStatus === "upcoming") return `Just ${daysUntilEvent} day${daysUntilEvent !== 1 ? "s" : ""} to go!`
     return "This event has passed."
   }
-  function handleLike(event: React.MouseEvent<HTMLButtonElement>): void {
-    throw new Error("Function not implemented.")
-  }
+  
+  const handleLike = async () => {
+    if (!event) return;
 
-  function handleCommentSubmit(event: FormEvent<HTMLFormElement>): void {
-    throw new Error("Function not implemented.")
-  }
+    const newLikedState = !liked;
+    setLiked(newLikedState);
+    setLikeCount(prev => newLikedState ? prev + 1 : prev - 1);
+
+    // Update localStorage
+    if (typeof window !== "undefined") {
+        const likedEvents = JSON.parse(localStorage.getItem('likedEvents') || '{}');
+        if (newLikedState) {
+            likedEvents[event.id] = true;
+        } else {
+            delete likedEvents[event.id];
+        }
+        localStorage.setItem('likedEvents', JSON.stringify(likedEvents));
+    }
+
+    // API call
+    try {
+        await fetch(`/api/events/${event.id}/like`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ liked: newLikedState }),
+        });
+    } catch (error) {
+        console.error("Failed to update like status:", error);
+        // Revert UI on failure
+        setLiked(!newLikedState);
+        setLikeCount(prev => !newLikedState ? prev + 1 : prev - 1);
+    }
+};
+
+const handleCommentSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!commentName || !commentMessage || !event) return;
+
+    setIsSubmittingComment(true);
+
+    try {
+        const response = await fetch(`/api/events/${event.id}/comment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ from: commentName, message: commentMessage }),
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            // Re-fetch event data to get the latest comments
+            fetchEventData(); 
+            setCommentName('');
+            setCommentMessage('');
+        } else {
+            console.error("Failed to post comment");
+        }
+    } catch (error) {
+        console.error("Error submitting comment:", error);
+    } finally {
+        setIsSubmittingComment(false);
+    }
+};
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50">

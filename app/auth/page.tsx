@@ -1,3 +1,4 @@
+// app/auth/page.tsx
 "use client"
 
 import type React from "react"
@@ -14,11 +15,14 @@ import { useRouter } from "next/navigation"
 export default function AuthPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
-  const [loginData, setLoginData] = useState({ identifier: "", password: "" })
-  const [registerData, setRegisterData] = useState({ username: "", email: "", password: "", confirmEmail: "", confirmPassword: "" })
+  const [loginData, setLoginData] = useState({ email: "", password: "" }) // Changed identifier to email
+  const [registerData, setRegisterData] = useState({ username: "", email: "", password: "", confirmPassword: "" })
   const [showLoginPassword, setShowLoginPassword] = useState(false)
   const [showRegisterPassword, setShowRegisterPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  
+  const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,15 +32,20 @@ export default function AuthPage() {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(loginData),
+        // Pass email as the identifier
+        body: JSON.stringify({ identifier: loginData.email, password: loginData.password }),
       })
 
       const data = await response.json()
 
       if (data.success) {
-        // Store user data in localStorage for client-side access
         localStorage.setItem("currentUser", JSON.stringify(data.user))
-        router.push("/dashboard")
+        // Redirect to admin or dashboard
+        if(data.user.email === ADMIN_EMAIL) {
+            router.push("/admin")
+        } else {
+            router.push("/dashboard")
+        }
       } else {
         alert(data.message)
       }
@@ -51,10 +60,6 @@ export default function AuthPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (registerData.email !== registerData.confirmEmail) {
-      alert("Emails don't match!")
-      return
-    }
     if (registerData.password !== registerData.confirmPassword) {
       alert("Passwords don't match!")
       return
@@ -81,7 +86,6 @@ export default function AuthPage() {
       const data = await response.json()
 
       if (data.success) {
-        // Store user data in localStorage for client-side access
         localStorage.setItem("currentUser", JSON.stringify(data.user))
         alert(data.message)
         router.push("/dashboard")
@@ -98,7 +102,6 @@ export default function AuthPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50">
-      {/* Header */}
       <header className="container mx-auto px-4 py-6">
         <div className="flex items-center gap-4">
           <Link href="/">
@@ -133,12 +136,13 @@ export default function AuthPage() {
                 <TabsContent value="login">
                   <form onSubmit={handleLogin} className="space-y-4">
                     <div className="space-y-2">
-                      <Label htmlFor="loginIdentifier">Username or Email</Label>
+                      <Label htmlFor="loginEmail">Email</Label>
                       <Input
-                        id="loginIdentifier"
-                        placeholder="Enter your username or email"
-                        value={loginData.identifier}
-                        onChange={(e) => setLoginData((prev) => ({ ...prev, identifier: e.target.value }))}
+                        id="loginEmail"
+                        type="email"
+                        placeholder="Enter your email"
+                        value={loginData.email}
+                        onChange={(e) => setLoginData((prev) => ({ ...prev, email: e.target.value }))}
                         required
                       />
                     </div>
@@ -189,17 +193,6 @@ export default function AuthPage() {
                         placeholder="Enter your email"
                         value={registerData.email}
                         onChange={(e) => setRegisterData((prev) => ({ ...prev, email: e.target.value }))}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="confirmEmail">Confirm Email</Label>
-                      <Input
-                        id="confirmEmail"
-                        type="email"
-                        placeholder="Confirm your email"
-                        value={registerData.confirmEmail}
-                        onChange={(e) => setRegisterData((prev) => ({ ...prev, confirmEmail: e.target.value }))}
                         required
                       />
                     </div>

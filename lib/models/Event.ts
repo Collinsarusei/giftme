@@ -13,7 +13,14 @@ export interface Gift {
   status: "completed" | "pending" | "pending_withdrawal" | "withdrawn"
   transactionId?: string
   withdrawnAt?: string
-  developerFee?: number // Added this field
+  developerFee?: number
+}
+
+export interface Comment {
+    id: string;
+    from: string;
+    message: string;
+    timestamp: string;
 }
 
 export interface Event {
@@ -33,10 +40,12 @@ export interface Event {
   shares: number
   createdAt: string
   creatorName: string
-  createdBy: string // username of creator
+  createdBy: string
   gifts: Gift[]
   status: "active" | "completed" | "cancelled" | "expired"
-  expiresAt: string 
+  expiresAt: string
+  likes: number; // New field for likes
+  comments: Comment[]; // New field for comments
 }
 
 export interface CreateEventData {

@@ -2,9 +2,9 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, FormEvent } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
@@ -28,20 +28,23 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
+  Sparkles,
+  Plus,
+  Heart,
 } from "lucide-react"
 import Link from "next/link"
 import { useParams, useSearchParams } from "next/navigation"
 import { WhatsAppIcon, FacebookIcon, InstagramIcon } from "@/components/ui/social-icons"
 
-// ... (giftPackages constant remains the same)
+// ... (giftPackages and ShareButtons component remain the same)
 const giftPackages = {
     KES: [
+      { amount: 100, emoji: "👍", label: "Nice One" },
       { amount: 200, emoji: "☕", label: "Coffee Treat" },
       { amount: 500, emoji: "🍰", label: "Cake Slice" },
       { amount: 1000, emoji: "🎁", label: "Nice Gift" },
       { amount: 2000, emoji: "🎉", label: "Party Fund" },
       { amount: 5000, emoji: "💝", label: "Special Gift" },
-      { amount: 10000, emoji: "🌟", label: "Amazing Gift" },
     ],
     USD: [
       { amount: 2, emoji: "☕", label: "Coffee Treat" },
@@ -52,34 +55,33 @@ const giftPackages = {
       { amount: 100, emoji: "🌟", label: "Amazing Gift" },
     ],
   }
-
-const ShareButtons = ({ eventLink, eventName }: { eventLink: string; eventName: string }) => {
-    const text = `Celebrate with me for my ${eventName}! Check out the event and send a gift here: ${eventLink}`;
-    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
-    const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(eventLink)}`;
-    const instagramUrl = `https://www.instagram.com`; // Instagram does not support direct sharing with pre-filled text.
   
-    return (
-      <div className="flex items-center justify-center gap-4 my-4">
-        <Button variant="outline" size="icon" asChild className="bg-green-500 text-white hover:bg-green-600">
-          <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
-            <WhatsAppIcon />
-          </a>
-        </Button>
-        <Button variant="outline" size="icon" asChild className="bg-blue-600 text-white hover:bg-blue-700">
-          <a href={facebookUrl} target="_blank" rel="noopener noreferrer">
-            <FacebookIcon />
-          </a>
-        </Button>
-        <Button variant="outline" size="icon" asChild className="bg-pink-600 text-white hover:bg-pink-700">
-            <a href={instagramUrl} target="_blank" rel="noopener noreferrer" title="Share on Instagram">
-                <InstagramIcon />
+  const ShareButtons = ({ eventLink, eventName }: { eventLink: string; eventName: string }) => {
+      const text = `Celebrate with me for my ${eventName}! Check out the event and send a gift here: ${eventLink}`;
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+      const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(eventLink)}`;
+      const instagramUrl = `https://www.instagram.com`;
+  
+      return (
+        <div className="flex items-center justify-center gap-4 my-4">
+          <Button variant="outline" size="icon" asChild className="bg-green-500 text-white hover:bg-green-600">
+            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer">
+              <WhatsAppIcon />
             </a>
-        </Button>
-      </div>
-    );
-  };
-  
+          </Button>
+          <Button variant="outline" size="icon" asChild className="bg-blue-600 text-white hover:bg-blue-700">
+            <a href={facebookUrl} target="_blank" rel="noopener noreferrer">
+              <FacebookIcon />
+            </a>
+          </Button>
+          <Button variant="outline" size="icon" asChild className="bg-pink-600 text-white hover:bg-pink-700">
+              <a href={instagramUrl} target="_blank" rel="noopener noreferrer" title="Share on Instagram">
+                  <InstagramIcon />
+              </a>
+          </Button>
+        </div>
+      );
+    };
 
 export default function EventPage() {
   const params = useParams()
@@ -95,62 +97,86 @@ export default function EventPage() {
   const [isOwner, setIsOwner] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [eventStatus, setEventStatus] = useState<"upcoming" | "today" | "expired">("upcoming")
+  const [eventStatus, setEventStatus] = useState<"upcoming" | "today" | "expired" | "cancelled">("upcoming")
   const [daysUntilEvent, setDaysUntilEvent] = useState(0)
   const [paymentStatus, setPaymentStatus] = useState("")
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null)
   const [showImageGallery, setShowImageGallery] = useState(false)
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+  const [commentName, setCommentName] = useState('');
+  const [commentMessage, setCommentMessage] = useState('');
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
-  // ... (useEffect remains the same)
-  useEffect(() => {
-    if (paymentStatusParam === "success") {
-      setShowSuccess(true)
-      setTimeout(() => setShowSuccess(false), 5000)
-    }
+  const fetchEventData = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/events/${params?.id}`)
+      const data = await res.json()
+      if (data.success && data.event) {
+        setEvent(data.event)
+        setLikeCount(data.event.likes || 0);
 
-    async function fetchEvent() {
-      setIsLoading(true)
-      try {
-        const res = await fetch(`/api/events/${params?.id}`)
-        const data = await res.json()
-        if (data.success) {
-          setEvent(data.event)
-          if (typeof window !== "undefined") {
-            const currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}")
-            setIsOwner(currentUser.username === data.event.createdBy)
-          }
-
-          const eventDate = new Date(data.event.date)
-          const today = new Date()
-          const todayStr = today.toDateString()
-          const eventStr = eventDate.toDateString()
-          const expires = new Date(data.event.expiresAt)
-
-          if (today > expires) {
-            setEventStatus("expired")
-          } else if (todayStr === eventStr) {
-            setEventStatus("today")
-          } else {
-            const diffTime = eventDate.getTime() - today.getTime()
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-            setDaysUntilEvent(diffDays)
-            setEventStatus("upcoming")
-          }
-        } else {
-          setEvent(null)
+        if (data.event.status === 'cancelled') {
+          setEventStatus('cancelled');
+          return;
         }
-      } catch (error) {
-        console.error("Error loading event:", error)
-        setEvent(null)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-    fetchEvent()
-  }, [params?.id, paymentStatusParam])
 
-  // ... (copyLink and handleGiftSubmit remain the same)
+        if (typeof window !== "undefined") {
+          const likedEvents = JSON.parse(localStorage.getItem('likedEvents') || '{}');
+          if (likedEvents[data.event.id]) {
+            setLiked(true);
+          }
+        }
+
+        const eventDate = new Date(data.event.date)
+        const today = new Date()
+        const expires = new Date(data.event.expiresAt)
+
+        if (today > expires) {
+          setEventStatus("expired")
+        } else if (today.toDateString() === eventDate.toDateString()) {
+          setEventStatus("today")
+        } else {
+          const diffTime = eventDate.getTime() - today.getTime();
+          setDaysUntilEvent(Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+          setEventStatus("upcoming");
+        }
+      } else {
+        setEvent(null)
+      }
+    } catch (error) {
+      console.error("Error loading event:", error)
+      setEvent(null)
+    } finally {
+      setIsLoading(false);
+    }
+  }, [params?.id]);
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetchEventData();
+
+    if (paymentStatusParam === 'success') {
+      setShowSuccess(true);
+      setTimeout(() => setShowSuccess(false), 5000);
+
+      // Poll for updates
+      let attempts = 0;
+      const interval = setInterval(() => {
+        if (attempts < 5) {
+          fetchEventData();
+          attempts++;
+        } else {
+          clearInterval(interval);
+        }
+      }, 2000); // Poll every 2 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [params?.id, paymentStatusParam, fetchEventData]);
+
+  // ... (handleLike, handleCommentSubmit, etc. remain the same)
   const copyLink = () => {
     if (typeof window === "undefined") return
     navigator.clipboard.writeText(window.location.href)
@@ -245,12 +271,12 @@ export default function EventPage() {
     )
   }
 
-  if (!event || eventStatus === "expired") {
+  if (!event || eventStatus === "expired" || eventStatus === 'cancelled') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50 flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Event Unavailable or Expired</h1>
-          <p className="text-gray-600 mb-4">This event is no longer available.</p>
+          <h1 className="text-2xl font-bold mb-4">Event Unavailable</h1>
+          <p className="text-gray-600 mb-4">This event is no longer available. It may have been expired or deleted by the creator.</p>
           <Link href="/">
             <Button>
               <Home className="h-4 w-4 mr-2" /> Go Home
@@ -265,6 +291,14 @@ export default function EventPage() {
     if (eventStatus === "upcoming") return `Just ${daysUntilEvent} day${daysUntilEvent !== 1 ? "s" : ""} to go!`
     return "This event has passed."
   }
+  function handleLike(event: React.MouseEvent<HTMLButtonElement>): void {
+    throw new Error("Function not implemented.")
+  }
+
+  function handleCommentSubmit(event: FormEvent<HTMLFormElement>): void {
+    throw new Error("Function not implemented.")
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50">
         {/* ... Header, notifications, image gallery ... */}
@@ -335,7 +369,7 @@ export default function EventPage() {
               className="max-w-full max-h-full object-contain select-none"
               onContextMenu={handleImageContextMenu}
               onDragStart={(e) => e.preventDefault()}
-              style={{ userSelect: "none", pointerEvents: "none" }}
+              style={{ userSelect: "none" }}
             />
 
             {/* Next button */}
@@ -424,29 +458,29 @@ export default function EventPage() {
             </div>
           )}
           {/* ... progress bar ... */}
-          {event.goal && (
-            <div className="max-w-md mx-auto mb-8">
-              <Card>
+          <div className="max-w-md mx-auto mb-8">
+            <Card>
                 <CardContent className="p-6">
-                  <div className="text-center mb-4">
+                    <div className="text-center mb-4">
                     <p className="text-2xl font-bold text-purple-600">
-                      {event.currency} {(event.raised || 0).toLocaleString()}
+                        {event.currency} {(event.raised || 0).toLocaleString()}
                     </p>
                     <p className="text-gray-600">
-                      raised of {event.currency} {event.goal.toLocaleString()} goal 🎯
+                        {event.goal ? `raised of ${event.currency} ${event.goal.toLocaleString()} goal` : 'raised'}
                     </p>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
-                    <div
-                      className="bg-gradient-to-r from-purple-500 to-pink-500 h-3 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(((event.raised || 0) / event.goal) * 100, 100)}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-center text-sm text-gray-600">{event.giftCount || 0} people have contributed</p>
+                    </div>
+                    {event.goal && (
+                    <div className="w-full bg-gray-200 rounded-full h-3 mb-4">
+                        <div
+                        className="bg-gradient-to-r from-purple-500 to-pink-500 h-3 rounded-full transition-all duration-500"
+                        style={{ width: `${Math.min(((event.raised || 0) / event.goal) * 100, 100)}%` }}
+                        ></div>
+                    </div>
+                    )}
+                    <p className="text-center text-sm text-gray-600">{event.giftCount || 0} people have contributed</p>
                 </CardContent>
-              </Card>
+            </Card>
             </div>
-          )}
 
 
           {/* Share Section */}
@@ -457,13 +491,19 @@ export default function EventPage() {
                     {copied ? <CheckCircle className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                     {copied ? "Copied!" : "Copy Link"}
                 </Button>
+                <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" onClick={handleLike}>
+                        <Heart className={`h-6 w-6 transition-colors ${liked ? 'text-red-500 fill-current' : 'text-gray-500'}`}/>
+                    </Button>
+                    <span className="font-bold">{likeCount}</span>
+                </div>
             </div>
             <ShareButtons eventLink={typeof window !== 'undefined' ? window.location.href : ''} eventName={event.name} />
           </div>
         </div>
       </section>
 
-      {/* ... rest of the component (gift packages, dialog, etc.) */}
+      {/* ... (rest of the component (gift packages, dialog, etc.) ... */}
       <section className="container mx-auto px-4 py-12">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold mb-4">Choose Your Gift</h2>
@@ -518,7 +558,7 @@ export default function EventPage() {
                   <Textarea placeholder="Write a special message..." value={giftMessage} onChange={(e) => setGiftMessage(e.target.value)} />
                 </div>
                 <Button className="w-full" onClick={handleGiftSubmit} disabled={isProcessing}>
-                  {isProcessing ? "Processing..." : "Proceed to Paystack"}
+                  {isProcessing ? "Processing..." : "Proceed with Gifting"}
                 </Button>
               </div>
             </DialogContent>
@@ -526,6 +566,81 @@ export default function EventPage() {
         </div>
       </section>
 
+      {/* Guestbook Section */}
+      <section className="bg-white py-16">
+        <div className="container mx-auto px-4">
+            <Card className="max-w-2xl mx-auto">
+                <CardHeader>
+                    <CardTitle>Guestbook</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <form onSubmit={handleCommentSubmit} className="space-y-4 mb-6">
+                        <div>
+                            <Label htmlFor="commentName">Your Name</Label>
+                            <Input id="commentName" value={commentName} onChange={e => setCommentName(e.target.value)} required/>
+                        </div>
+                        <div>
+                            <Label htmlFor="commentMessage">Message</Label>
+                            <Textarea id="commentMessage" value={commentMessage} onChange={e => setCommentMessage(e.target.value)} required/>
+                        </div>
+                        <Button type="submit" disabled={isSubmittingComment}>
+                            {isSubmittingComment ? 'Posting...' : 'Post to Guestbook'}
+                        </Button>
+                    </form>
+                    <div className="space-y-4">
+                        {(event.comments || []).slice().reverse().map((comment: any) => (
+                            <div key={comment.id} className="p-3 bg-gray-50 rounded-md">
+                                <p className="font-semibold">{comment.from}</p>
+                                <p>{comment.message}</p>
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+      </section>
+
+        {/* ... (Create Your Own and Footer sections remain the same) ... */}
+        {/* Create Your Own Section */}
+        <section className="bg-white py-16">
+        <div className="container mx-auto px-4 text-center">
+          <div className="max-w-2xl mx-auto">
+            <Sparkles className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+            <h2 className="text-3xl font-bold mb-4">Want Your Own Celebration Page?</h2>
+            <p className="text-gray-600 mb-8">
+              Create your own event page and start receiving gifts from friends and family.
+            </p>
+            <Link href="/create">
+              <Button
+                size="lg"
+                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 px-8"
+              >
+                <Plus className="mr-2 h-5 w-5" /> Create Your Event
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white py-8">
+        <div className="container mx-auto px-4 text-center">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <Gift className="h-6 w-6" />
+            <span className="text-xl font-bold">CelebrateWith.me</span>
+          </div>
+          <p className="text-gray-400 mb-4">Making celebrations more meaningful, one gift at a time</p>
+          <Link href="/support-developer">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 border-gray-600 text-gray-300 hover:bg-gray-800 bg-transparent"
+            >
+              <Heart className="h-4 w-4" />💖 Support the Developer
+            </Button>
+          </Link>
+        </div>
+      </footer>
     </div>
   )
 }

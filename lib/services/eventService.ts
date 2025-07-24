@@ -1,6 +1,6 @@
 // lib/services/eventService.ts
 import { getCollection } from "../mongodb"
-import type { Event, CreateEventData, Gift } from "../models/Event"
+import type { Event, CreateEventData, Gift, Comment } from "../models/Event" // Import Comment
 
 export class EventService {
   private static collectionName = "events"
@@ -32,12 +32,15 @@ export class EventService {
       gifts: [],
       status: "active",
       expiresAt: expiresAt.toISOString(),
+      likes: 0, // Initialize likes
+      comments: [], // Initialize comments
     }
 
     const result = await collection.insertOne(newEvent)
     return { ...newEvent, _id: result.insertedId }
   }
 
+  // ... (getEventById, getEventsByCreator, etc. remain the same)
   static async getEventById(eventId: string): Promise<Event | null> {
     const collection = await getCollection(this.collectionName)
     const result = await collection.findOne({ id: eventId })
@@ -87,17 +90,6 @@ export class EventService {
     return result.modifiedCount > 0
   }
 
-  static async updateGiftStatus(eventId: string, giftId: string, status: string, withdrawnAt?: string): Promise<boolean> {
-    const collection = await getCollection(this.collectionName)
-    const updateData: any = { "gifts.$.status": status }
-    if (withdrawnAt) {
-      updateData["gifts.$.withdrawnAt"] = withdrawnAt
-    }
-
-    const result = await collection.updateOne({ id: eventId, "gifts.id": giftId }, { $set: updateData })
-    return result.modifiedCount > 0
-  }
-
   static async updateManyGiftStatuses(
     eventId: string,
     giftIds: string[],
@@ -110,44 +102,24 @@ export class EventService {
     )
     return result.modifiedCount > 0
   }
-
-  static async searchEvents(query: string): Promise<Event[]> {
-    const collection = await getCollection(this.collectionName)
-    const now = new Date().toISOString()
-    const results = await collection
-      .find({
-        status: "active",
-        expiresAt: { $gte: now },
-        $or: [
-          { name: { $regex: query, $options: "i" } },
-          { type: { $regex: query, $options: "i" } },
-          { description: { $regex: query, $options: "i" } },
-        ],
-      })
-      .sort({ createdAt: -1 })
-      .toArray()
-    return results.map(({ _id, ...event }) => event as Event)
-  }
-
   static async deleteEvent(eventId: string): Promise<boolean> {
     const collection = await getCollection(this.collectionName)
     const result = await collection.updateOne({ id: eventId }, { $set: { status: "cancelled" } })
     return result.modifiedCount > 0
   }
 
-  static async expirePastEvents(): Promise<Event[]> {
-    const collection = await getCollection(this.collectionName)
-    const now = new Date().toISOString()
-    const expiredEvents = await collection.find({ status: "active", expiresAt: { $lt: now } }).toArray()
-    if (expiredEvents.length > 0) {
-      await collection.updateMany({ status: "active", expiresAt: { $lt: now } }, { $set: { status: "expired" } })
-    }
-    return expiredEvents.map(({ _id, ...rest }) => rest as Event)
+
+  // New methods for likes and comments
+  static async toggleLikeEvent(eventId: string, liked: boolean): Promise<boolean> {
+    const collection = await getCollection(this.collectionName);
+    const increment = liked ? 1 : -1;
+    const result = await collection.updateOne({ id: eventId }, { $inc: { likes: increment } });
+    return result.modifiedCount > 0;
   }
 
-  static async updateEventStatus(eventId: string, status: "active" | "completed" | "cancelled" | "expired"): Promise<boolean> {
-    const collection = await getCollection(this.collectionName)
-    const result = await collection.updateOne({ id: eventId }, { $set: { status: status } })
-    return result.modifiedCount > 0
+  static async addCommentToEvent(eventId: string, comment: Comment): Promise<boolean> {
+    const collection = await getCollection(this.collectionName);
+    const result = await collection.updateOne({ id: eventId }, { $push: { comments: comment as any } });
+    return result.modifiedCount > 0;
   }
 }

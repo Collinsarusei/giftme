@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -24,11 +25,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Gift, Eye, Calendar, DollarSign, Wallet, Download, Trash2 } from "lucide-react"
+import { Gift, Eye, Calendar, DollarSign, Wallet, Download, Trash2, Home, LogOut, Heart } from "lucide-react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
 
 export default function DashboardPage() {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const withdrawalEventId = searchParams?.get("withdrawal")
 
@@ -36,18 +37,15 @@ export default function DashboardPage() {
   const [selectedEventId, setSelectedEventId] = useState<string>("")
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [totalReceived, setTotalReceived] = useState(0)
-  const [totalGifts, setTotalGifts] = useState(0)
-  const [totalViews, setTotalViews] = useState(0)
   const [availableBalance, setAvailableBalance] = useState(0)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [withdrawalMessage, setWithdrawalMessage] = useState("")
 
-  const DEV_FEE_PERCENTAGE = 0.03 // 3%
+  const PLATFORM_FEE_PERCENTAGE = 0.03 // 3%
   const PAYSTACK_TRANSFER_FEE_KES = 20 // KES
 
-  // ... (useEffect and other functions remain the same)
+  // ... (useEffect remains the same)
   useEffect(() => {
     async function fetchUserEvents() {
       setIsLoading(true)
@@ -58,6 +56,7 @@ export default function DashboardPage() {
 
       if (!currentUser || !currentUser.username) {
         setIsLoading(false)
+        router.push("/auth")
         return
       }
 
@@ -79,13 +78,6 @@ export default function DashboardPage() {
             setSelectedEventId(initialSelectedEvent.id)
             setSelectedEvent(initialSelectedEvent)
           }
-
-          const earnings = myEvents.reduce((sum: number, event: any) => sum + (event.raised || 0), 0)
-          const gifts = myEvents.reduce((sum: number, event: any) => sum + (event.giftCount || 0), 0)
-          const views = myEvents.reduce((sum: number, event: any) => sum + (event.views || 0), 0)
-          setTotalReceived(earnings)
-          setTotalGifts(gifts)
-          setTotalViews(views)
         }
       } catch (error) {
         console.error("Error loading dashboard:", error)
@@ -94,7 +86,7 @@ export default function DashboardPage() {
       }
     }
     fetchUserEvents()
-  }, [withdrawalEventId])
+  }, [withdrawalEventId, router])
 
   useEffect(() => {
     if (selectedEvent) {
@@ -113,18 +105,40 @@ export default function DashboardPage() {
     const event = userEvents.find((e) => e.id === eventId)
     setSelectedEvent(event)
   }
+  
+  const handleLogout = () => {
+    if (typeof window !== 'undefined') {
+        localStorage.removeItem('currentUser');
+        router.push('/');
+    }
+  }
 
   const handleDeleteEvent = async (eventId: string) => {
+    // Safety Check: Prevent deletion if there are pending withdrawals
+    const hasPendingWithdrawals = selectedEvent.gifts.some((gift: any) => gift.status === 'pending_withdrawal');
+    if (hasPendingWithdrawals) {
+        alert("This event cannot be deleted because there are pending withdrawals. Please withdraw all available funds first.");
+        return;
+    }
+
     setIsDeleting(eventId)
     try {
       const res = await fetch(`/api/events/${eventId}/delete`, { method: "DELETE" })
       const data = await res.json()
       if (data.success) {
-        setUserEvents(prevEvents => prevEvents.filter(e => e.id !== eventId))
-        if(selectedEventId === eventId) {
-            setSelectedEvent(null)
-            setSelectedEventId("")
-        }
+        setUserEvents(prevEvents => {
+            const newEvents = prevEvents.filter(e => e.id !== eventId)
+            if (selectedEventId === eventId) {
+                if (newEvents.length > 0) {
+                    setSelectedEvent(newEvents[0])
+                    setSelectedEventId(newEvents[0].id)
+                } else {
+                    setSelectedEvent(null)
+                    setSelectedEventId("")
+                }
+            }
+            return newEvents
+        })
       } else {
         alert(data.message)
       }
@@ -136,14 +150,15 @@ export default function DashboardPage() {
     }
   }
 
+  // ... (handlePaystackWithdrawal and other functions remain the same)
   const handlePaystackWithdrawal = async () => {
     if (!selectedEvent || availableBalance <= 0) return
 
     setIsWithdrawing(true)
     setWithdrawalMessage("Initiating withdrawal...")
 
-    const netAmountAfterDevFee = availableBalance * (1 - DEV_FEE_PERCENTAGE)
-    const finalPayout = netAmountAfterDevFee - PAYSTACK_TRANSFER_FEE_KES
+    const netAmountAfterPlatformFee = availableBalance * (1 - PLATFORM_FEE_PERCENTAGE)
+    const finalPayout = netAmountAfterPlatformFee - PAYSTACK_TRANSFER_FEE_KES
 
     if (finalPayout <= 0) {
       setWithdrawalMessage("❌ Net withdrawal amount is too low after fees.")
@@ -191,7 +206,6 @@ export default function DashboardPage() {
     }
   }
 
-
   const getStatusVariant = (status: string) => {
     switch (status) {
       case 'withdrawn':
@@ -211,16 +225,23 @@ export default function DashboardPage() {
     )
   }
 
-  const developerFee = availableBalance * DEV_FEE_PERCENTAGE
-  const finalPayout = availableBalance - developerFee - PAYSTACK_TRANSFER_FEE_KES
+  const platformFee = availableBalance * PLATFORM_FEE_PERCENTAGE
+  const finalPayout = availableBalance - platformFee - PAYSTACK_TRANSFER_FEE_KES
+  const hasPendingWithdrawals = selectedEvent?.gifts.some((gift: any) => gift.status === 'pending_withdrawal');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50">
       <header className="bg-white shadow-sm">
-        <div className="container mx-auto px-4 py-6">
+        <div className="container mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
             Creator Dashboard
           </h1>
+          <div className="flex gap-2">
+            <Link href="/" passHref>
+                <Button variant="outline"><Home className="mr-2 h-4 w-4"/> Home</Button>
+            </Link>
+            <Button onClick={handleLogout}><LogOut className="mr-2 h-4 w-4"/> Logout</Button>
+          </div>
         </div>
       </header>
 
@@ -251,10 +272,11 @@ export default function DashboardPage() {
                             <CardTitle>{selectedEvent.name}</CardTitle>
                             <CardDescription>Event Status: <Badge>{selectedEvent.status}</Badge></CardDescription>
                         </CardHeader>
-                        <CardContent className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <CardContent className="grid grid-cols-2 lg:grid-cols-5 gap-4">
                             <div className="text-center"><DollarSign className="mx-auto h-6 w-6 text-green-500"/><p className="font-bold text-lg">{selectedEvent.raised.toLocaleString()}</p><p className="text-sm text-gray-500">Raised</p></div>
                             <div className="text-center"><Gift className="mx-auto h-6 w-6 text-blue-500"/><p className="font-bold text-lg">{selectedEvent.giftCount}</p><p className="text-sm text-gray-500">Gifts</p></div>
                             <div className="text-center"><Eye className="mx-auto h-6 w-6 text-purple-500"/><p className="font-bold text-lg">{selectedEvent.views}</p><p className="text-sm text-gray-500">Views</p></div>
+                            <div className="text-center"><Heart className="mx-auto h-6 w-6 text-red-500"/><p className="font-bold text-lg">{selectedEvent.likes || 0}</p><p className="text-sm text-gray-500">Likes</p></div>
                             <div className="text-center"><Calendar className="mx-auto h-6 w-6 text-orange-500"/><p className="font-bold text-lg">{new Date(selectedEvent.date).toLocaleDateString()}</p><p className="text-sm text-gray-500">Date</p></div>
                         </CardContent>
                         <CardFooter className="flex justify-between">
@@ -263,7 +285,7 @@ export default function DashboardPage() {
                             </Link>
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
-                                <Button variant="destructive" disabled={isDeleting === selectedEvent.id}>
+                                <Button variant="destructive" disabled={isDeleting === selectedEvent.id || hasPendingWithdrawals} title={hasPendingWithdrawals ? "You must withdraw pending funds before deleting." : ""}>
                                     {isDeleting === selectedEvent.id ? 'Deleting...' : <><Trash2 className="mr-2 h-4 w-4"/> Delete Event</>}
                                 </Button>
                                 </AlertDialogTrigger>
@@ -271,7 +293,7 @@ export default function DashboardPage() {
                                 <AlertDialogHeader>
                                     <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                     <AlertDialogDescription>
-                                    This action cannot be undone. This will permanently delete the event and all its data.
+                                    This will mark the event as cancelled and it will no longer be publicly accessible. This action cannot be undone.
                                     </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
@@ -283,12 +305,12 @@ export default function DashboardPage() {
                         </CardFooter>
                     </Card>
                     
-                    {/* Gift List */}
+                    {/* ... (Gift List card remains the same) ... */}
                     <Card>
                         <CardHeader><CardTitle>Gifts Received</CardTitle></CardHeader>
                         <CardContent>
                             <div className="space-y-2 max-h-96 overflow-y-auto">
-                                {selectedEvent.gifts.length > 0 ? selectedEvent.gifts.map((gift: any) => (
+                                {selectedEvent.gifts.length > 0 ? selectedEvent.gifts.sort((a:any, b:any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((gift: any) => (
                                     <div key={gift.id} className="p-2 border rounded-md flex justify-between items-center">
                                         <div>
                                             <p className="font-semibold">{gift.from} - KES {gift.amount}</p>
@@ -303,7 +325,7 @@ export default function DashboardPage() {
 
                 </div>
 
-                {/* Withdrawal Card */}
+                {/* ... (Withdrawal Card remains the same) ... */}
                 <div className="space-y-6">
                   <Card>
                     <CardHeader>
@@ -316,7 +338,7 @@ export default function DashboardPage() {
                                 <p className="text-2xl font-bold">KES {availableBalance.toLocaleString()}</p>
                             </div>
                             <div className="p-3 bg-gray-50 rounded-md text-sm space-y-1">
-                                <div className="flex justify-between"><span>3% Developer Fee:</span><span>- KES {developerFee.toFixed(2)}</span></div>
+                                <div className="flex justify-between"><span>3% Platform Fee:</span><span>- KES {platformFee.toFixed(2)}</span></div>
                                 <div className="flex justify-between"><span>Paystack Transfer Fee:</span><span>- KES {PAYSTACK_TRANSFER_FEE_KES.toFixed(2)}</span></div>
                                 <hr/>
                                 <div className="flex justify-between font-bold"><span>Final Payout:</span><span>KES {finalPayout > 0 ? finalPayout.toFixed(2) : '0.00'}</span></div>
@@ -333,11 +355,11 @@ export default function DashboardPage() {
             )}
           </>
         ) : (
-          <div className="text-center">
+          <div className="text-center py-12">
             <h2 className="text-xl font-semibold">No events found.</h2>
             <p className="text-gray-600">Create an event to get started.</p>
             <Link href="/create" passHref>
-                <Button className="mt-4">Create Event</Button>
+                <Button className="mt-4">Create Your First Event</Button>
             </Link>
           </div>
         )}

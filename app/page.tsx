@@ -1,16 +1,15 @@
-// app/page.tsx (Updated Features Section)
+// app/page.tsx
 "use client"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Gift, Heart, PartyPopper, Sparkles, Search, User, CreditCard } from "lucide-react" // Added CreditCard
+import { Gift, Heart, PartyPopper, Sparkles, Search, User, CreditCard } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import { useEffect, useState } from "react"
 import { Input } from "@/components/ui/input"
-
-// ... (rest of the component is the same)
+import { InstallPWA } from "@/components/ui/install-pwa" // Import the new component
 
 const HomePage = () => {
   const [sampleEvents, setSampleEvents] = useState<any[]>([])
@@ -19,7 +18,6 @@ const HomePage = () => {
   const [currentUser, setCurrentUser] = useState<any>(null)
 
   // ... (useEffect and other functions remain the same)
-  
   // Filter events based on search query and expiration
   const filteredEvents = sampleEvents.filter(
     (event: any) =>
@@ -62,7 +60,7 @@ const HomePage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50">
-      {/* Header, Hero, Search, Sample Events... (Keep as is) */}
+      {/* ... (Header, Hero, etc. remain the same) ... */}
       <header className="container mx-auto px-4 py-6 flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Gift className="h-8 w-8 text-purple-600" />
@@ -278,7 +276,6 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="bg-gray-900 text-white py-8">
         <div className="container mx-auto px-4 text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
@@ -286,15 +283,18 @@ const HomePage = () => {
             <span className="text-xl font-bold">CelebrateWith.me</span>
           </div>
           <p className="text-gray-400 mb-4">Making celebrations more meaningful, one gift at a time</p>
-          <Link href="/support-developer">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 border-gray-600 text-gray-300 hover:bg-gray-800 bg-transparent"
-            >
-              <Heart className="h-4 w-4" />💖 Support the Developer
-            </Button>
-          </Link>
+          <div className="flex justify-center items-center gap-4">
+            <Link href="/support-developer">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 border-gray-600 text-gray-300 hover:bg-gray-800 bg-transparent"
+              >
+                <Heart className="h-4 w-4" />💖 Support the Developer
+              </Button>
+            </Link>
+            <InstallPWA />
+          </div>
         </div>
       </footer>
     </div>

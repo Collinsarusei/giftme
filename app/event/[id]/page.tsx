@@ -31,12 +31,12 @@ import {
   Sparkles,
   Plus,
   Heart,
+  MessageSquare,
 } from "lucide-react"
 import Link from "next/link"
 import { useParams, useSearchParams } from "next/navigation"
 import { WhatsAppIcon, FacebookIcon, InstagramIcon } from "@/components/ui/social-icons"
 
-// ... (giftPackages and ShareButtons component remain the same)
 const giftPackages = {
     KES: [
       { amount: 100, emoji: "👍", label: "Nice One" },
@@ -105,9 +105,6 @@ export default function EventPage() {
   const [showImageGallery, setShowImageGallery] = useState(false)
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
-  const [commentName, setCommentName] = useState('');
-  const [commentMessage, setCommentMessage] = useState('');
-  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
   const fetchEventData = useCallback(async () => {
     try {
@@ -160,23 +157,9 @@ export default function EventPage() {
     if (paymentStatusParam === 'success') {
       setShowSuccess(true);
       setTimeout(() => setShowSuccess(false), 5000);
-
-      // Poll for updates
-      let attempts = 0;
-      const interval = setInterval(() => {
-        if (attempts < 5) {
-          fetchEventData();
-          attempts++;
-        } else {
-          clearInterval(interval);
-        }
-      }, 2000); // Poll every 2 seconds
-
-      return () => clearInterval(interval);
     }
   }, [params?.id, paymentStatusParam, fetchEventData]);
 
-  // ... (handleLike, handleCommentSubmit, etc. remain the same)
   const copyLink = () => {
     if (typeof window === "undefined") return
     navigator.clipboard.writeText(window.location.href)
@@ -229,7 +212,6 @@ export default function EventPage() {
     }
   }
 
-  // ... (resetForm, image gallery functions, and other helpers remain the same)
   const resetForm = () => {
     setSelectedPackage(null)
     setGiftMessage("")
@@ -299,7 +281,6 @@ export default function EventPage() {
     setLiked(newLikedState);
     setLikeCount(prev => newLikedState ? prev + 1 : prev - 1);
 
-    // Update localStorage
     if (typeof window !== "undefined") {
         const likedEvents = JSON.parse(localStorage.getItem('likedEvents') || '{}');
         if (newLikedState) {
@@ -310,7 +291,6 @@ export default function EventPage() {
         localStorage.setItem('likedEvents', JSON.stringify(likedEvents));
     }
 
-    // API call
     try {
         await fetch(`/api/events/${event.id}/like`, {
             method: 'POST',
@@ -319,45 +299,13 @@ export default function EventPage() {
         });
     } catch (error) {
         console.error("Failed to update like status:", error);
-        // Revert UI on failure
         setLiked(!newLikedState);
         setLikeCount(prev => !newLikedState ? prev + 1 : prev - 1);
     }
 };
 
-const handleCommentSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!commentName || !commentMessage || !event) return;
-
-    setIsSubmittingComment(true);
-
-    try {
-        const response = await fetch(`/api/events/${event.id}/comment`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ from: commentName, message: commentMessage }),
-        });
-        const data = await response.json();
-
-        if (data.success) {
-            // Re-fetch event data to get the latest comments
-            fetchEventData(); 
-            setCommentName('');
-            setCommentMessage('');
-        } else {
-            console.error("Failed to post comment");
-        }
-    } catch (error) {
-        console.error("Error submitting comment:", error);
-    } finally {
-        setIsSubmittingComment(false);
-    }
-};
-
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50">
-        {/* ... Header, notifications, image gallery ... */}
         <header className="container mx-auto px-4 py-6">
         <div className="flex items-center justify-between">
           <Link href="/">
@@ -377,7 +325,6 @@ const handleCommentSubmit = async (e: FormEvent) => {
         </div>
       </header>
 
-      {/* Success Notification */}
       {showSuccess && (
         <div className="fixed top-4 right-4 z-50 bg-green-500 text-white p-4 rounded-lg shadow-lg flex items-center gap-2">
           <CheckCircle className="h-5 w-5" />
@@ -385,18 +332,15 @@ const handleCommentSubmit = async (e: FormEvent) => {
         </div>
       )}
 
-      {/* Payment Status Notification */}
       {paymentStatus && (
         <div className="fixed top-4 left-4 right-4 z-50 bg-blue-500 text-white p-4 rounded-lg shadow-lg text-center">
           <p className="font-semibold whitespace-pre-line">{paymentStatus}</p>
         </div>
       )}
 
-      {/* Image Gallery Modal */}
       {showImageGallery && selectedImageIndex !== null && event.images && (
         <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center">
           <div className="relative w-full h-full flex items-center justify-center">
-            {/* Close button */}
             <Button
               variant="ghost"
               size="sm"
@@ -405,8 +349,6 @@ const handleCommentSubmit = async (e: FormEvent) => {
             >
               <X className="h-6 w-6" />
             </Button>
-
-            {/* Previous button */}
             {event.images.length > 1 && (
               <Button
                 variant="ghost"
@@ -417,8 +359,6 @@ const handleCommentSubmit = async (e: FormEvent) => {
                 <ChevronLeft className="h-8 w-8" />
               </Button>
             )}
-
-            {/* Image */}
             <img
               src={event.images[selectedImageIndex] || "/placeholder.svg"}
               alt={`${event.name} photo ${selectedImageIndex + 1}`}
@@ -427,8 +367,6 @@ const handleCommentSubmit = async (e: FormEvent) => {
               onDragStart={(e) => e.preventDefault()}
               style={{ userSelect: "none" }}
             />
-
-            {/* Next button */}
             {event.images.length > 1 && (
               <Button
                 variant="ghost"
@@ -439,8 +377,6 @@ const handleCommentSubmit = async (e: FormEvent) => {
                 <ChevronRight className="h-8 w-8" />
               </Button>
             )}
-
-            {/* Image counter */}
             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/50 text-white px-3 py-1 rounded-full text-sm">
               {selectedImageIndex + 1} / {event.images.length}
             </div>
@@ -451,7 +387,6 @@ const handleCommentSubmit = async (e: FormEvent) => {
       <section className="relative overflow-hidden">
         <div className="container mx-auto px-4 py-12 relative">
           <div className="text-center mb-8">
-            {/* ... title, description, date, badge ... */}
             <h1 className="text-4xl md:text-5xl font-bold mb-4 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                 {event.name}
                 </h1>
@@ -474,7 +409,6 @@ const handleCommentSubmit = async (e: FormEvent) => {
                 </div>
           </div>
 
-           {/* Event Images with Gallery */}
            <div className="max-w-4xl mx-auto mb-8">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {event.images && event.images.length > 0 ? (
@@ -507,13 +441,11 @@ const handleCommentSubmit = async (e: FormEvent) => {
             </div>
           </div>
 
-           {/* Description */}
            {event.description && (
             <div className="max-w-2xl mx-auto text-center mb-8">
               <p className="text-lg text-gray-700 bg-white/50 backdrop-blur-sm rounded-lg p-6">{event.description}</p>
             </div>
           )}
-          {/* ... progress bar ... */}
           <div className="max-w-md mx-auto mb-8">
             <Card>
                 <CardContent className="p-6">
@@ -539,7 +471,6 @@ const handleCommentSubmit = async (e: FormEvent) => {
             </div>
 
 
-          {/* Share Section */}
           <div className="text-center mb-8">
             <h3 className="font-semibold mb-2">Share this event!</h3>
             <div className="flex items-center justify-center gap-2">
@@ -559,7 +490,6 @@ const handleCommentSubmit = async (e: FormEvent) => {
         </div>
       </section>
 
-      {/* ... (rest of the component (gift packages, dialog, etc.) ... */}
       <section className="container mx-auto px-4 py-12">
         <div className="text-center mb-8">
           <h2 className="text-3xl font-bold mb-4">Choose Your Gift</h2>
@@ -622,42 +552,38 @@ const handleCommentSubmit = async (e: FormEvent) => {
         </div>
       </section>
 
-      {/* Guestbook Section */}
       <section className="bg-white py-16">
         <div className="container mx-auto px-4">
             <Card className="max-w-2xl mx-auto">
                 <CardHeader>
-                    <CardTitle>Guestbook</CardTitle>
+                    <CardTitle className="flex items-center gap-2">
+                      <MessageSquare className="h-6 w-6" />
+                      Gift Messages
+                    </CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <form onSubmit={handleCommentSubmit} className="space-y-4 mb-6">
-                        <div>
-                            <Label htmlFor="commentName">Your Name</Label>
-                            <Input id="commentName" value={commentName} onChange={e => setCommentName(e.target.value)} required/>
-                        </div>
-                        <div>
-                            <Label htmlFor="commentMessage">Message</Label>
-                            <Textarea id="commentMessage" value={commentMessage} onChange={e => setCommentMessage(e.target.value)} required/>
-                        </div>
-                        <Button type="submit" disabled={isSubmittingComment}>
-                            {isSubmittingComment ? 'Posting...' : 'Post to Guestbook'}
-                        </Button>
-                    </form>
                     <div className="space-y-4">
-                        {(event.comments || []).slice().reverse().map((comment: any) => (
-                            <div key={comment.id} className="p-3 bg-gray-50 rounded-md">
-                                <p className="font-semibold">{comment.from}</p>
-                                <p>{comment.message}</p>
-                            </div>
-                        ))}
+                        {event.gifts && event.gifts.length > 0 ? (
+                           [...event.gifts].reverse().map((gift: any) => (
+                            gift.message && (
+                              <div key={gift.id} className="p-4 bg-gray-50 rounded-lg shadow-sm">
+                                  <p className="font-bold text-purple-700">{gift.from}</p>
+                                  <p className="text-gray-700 pt-1">"{gift.message}"</p>
+                                  <p className="text-xs text-gray-500 pt-2">
+                                      Sent {new Date(gift.timestamp).toLocaleString()}
+                                  </p>
+                              </div>
+                            )
+                           ))
+                        ) : (
+                          <p className="text-center text-gray-500 py-4">Be the first to leave a message!</p>
+                        )}
                     </div>
                 </CardContent>
             </Card>
         </div>
       </section>
 
-        {/* ... (Create Your Own and Footer sections remain the same) ... */}
-        {/* Create Your Own Section */}
         <section className="bg-white py-16">
         <div className="container mx-auto px-4 text-center">
           <div className="max-w-2xl mx-auto">
@@ -678,7 +604,6 @@ const handleCommentSubmit = async (e: FormEvent) => {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="bg-gray-900 text-white py-8">
         <div className="container mx-auto px-4 text-center">
           <div className="flex items-center justify-center gap-2 mb-4">

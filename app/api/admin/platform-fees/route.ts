@@ -2,6 +2,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getCollection } from "@/lib/mongodb";
 
+export const dynamic = 'force-dynamic'
+
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
 
 export async function GET(request: NextRequest) {

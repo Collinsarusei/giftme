@@ -10,11 +10,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Missing required data" }, { status: 400 })
     }
 
+    const grossAmount = giftData.amount;
+    const platformFee = grossAmount * 0.03; // 3% fee
+    const netAmount = grossAmount - platformFee;
+
     const gift: Gift = {
       id: Date.now().toString(),
       from: giftData.from || "Anonymous",
       email: giftData.email,
-      amount: giftData.amount,
+      amount: grossAmount,
+      developerFee: platformFee,
       currency: giftData.currency || "KES",
       message: giftData.message,
       timestamp: new Date().toISOString(),
@@ -23,7 +28,7 @@ export async function POST(request: NextRequest) {
       transactionId,
     }
 
-    const success = await EventService.addGiftToEvent(eventId, gift)
+    const success = await EventService.addGiftToEvent(eventId, gift, netAmount);
 
     if (!success) {
       return NextResponse.json({ success: false, message: "Failed to record gift" }, { status: 500 })

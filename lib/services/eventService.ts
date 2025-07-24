@@ -40,7 +40,6 @@ export class EventService {
     return { ...newEvent, _id: result.insertedId }
   }
 
-  // ... (getEventById, getEventsByCreator, etc. remain the same)
   static async getEventById(eventId: string): Promise<Event | null> {
     const collection = await getCollection(this.collectionName)
     const result = await collection.findOne({ id: eventId })
@@ -61,6 +60,29 @@ export class EventService {
     const results = await collection.find({ status: "active", expiresAt: { $gte: now } }).sort({ createdAt: -1 }).limit(limit).toArray()
     return results.map(({ _id, ...event }) => event as Event)
   }
+  
+  static async searchEvents(query: string): Promise<Event[]> {
+    const collection = await getCollection(this.collectionName);
+    const now = new Date().toISOString();
+    
+    // Using a text index on 'name', 'type', and 'creatorName' would be more efficient here.
+    // For now, we'll use a regex search.
+    const results = await collection.find({
+        $and: [
+            { status: "active" },
+            { expiresAt: { $gte: now } },
+            {
+                $or: [
+                    { name: { $regex: query, $options: "i" } },
+                    { type: { $regex: query, $options: "i" } },
+                    { creatorName: { $regex: query, $options: "i" } },
+                ]
+            }
+        ]
+    }).sort({ createdAt: -1 }).toArray();
+
+    return results.map(({ _id, ...event }) => event as Event);
+}
 
   static async incrementViews(eventId: string): Promise<boolean> {
     const collection = await getCollection(this.collectionName)
@@ -70,7 +92,6 @@ export class EventService {
 
   static async addGiftToEvent(eventId: string, gift: Gift, netAmount: number): Promise<boolean> {
     const collection = await getCollection(this.collectionName)
-    // Check if the gift already exists to prevent duplicates from webhook retries
     const event = await collection.findOne({ id: eventId, "gifts.transactionId": gift.transactionId })
     if (event) {
       console.warn(`Attempted to add a duplicate gift with transaction ID ${gift.transactionId}. Ignoring.`)
@@ -82,7 +103,7 @@ export class EventService {
       {
         $push: { gifts: gift as any },
         $inc: {
-          raised: netAmount, // Use the netAmount for the 'raised' field
+          raised: netAmount,
           giftCount: 1,
         },
       }
@@ -108,8 +129,6 @@ export class EventService {
     return result.modifiedCount > 0
   }
 
-
-  // New methods for likes and comments
   static async toggleLikeEvent(eventId: string, liked: boolean): Promise<boolean> {
     const collection = await getCollection(this.collectionName);
     const increment = liked ? 1 : -1;
@@ -117,9 +136,23 @@ export class EventService {
     return result.modifiedCount > 0;
   }
 
-  static async addCommentToEvent(eventId: string, comment: Comment): Promise<boolean> {
+  static async expirePastEvents(): Promise<Event[]> {
     const collection = await getCollection(this.collectionName);
-    const result = await collection.updateOne({ id: eventId }, { $push: { comments: comment as any } });
-    return result.modifiedCount > 0;
+    const now = new Date().toISOString();
+
+    const expiredEvents = await collection.find({
+        status: "active",
+        expiresAt: { $lt: now }
+    }).toArray();
+
+    if (expiredEvents.length > 0) {
+        const eventIds = expiredEvents.map(event => event.id);
+        await collection.updateMany(
+            { id: { $in: eventIds } },
+            { $set: { status: "expired" } }
+        );
+    }
+    
+    return expiredEvents.map(({ _id, ...event }) => event as Event);
   }
 }

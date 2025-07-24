@@ -16,8 +16,10 @@ function calculateWithdrawalFee(amount: number, currency = "NGN"): number {
 }
 
 export async function POST(request: NextRequest) {
+  let body: any;
   try {
-    const { giftId, eventId, recipientCode, amount, currency = "NGN", reason } = await request.json()
+    body = await request.json()
+    const { giftId, eventId, recipientCode, amount, currency = "NGN", reason } = body
 
     console.log("=== Paystack Withdrawal Request ===")
     console.log("Gift ID:", giftId)
@@ -105,6 +107,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("❌ Paystack withdrawal error:", error)
 
+    const requestAmount = body?.amount || 0
     // Always fallback to test mode to not block users
     return NextResponse.json({
       success: true,
@@ -112,9 +115,9 @@ export async function POST(request: NextRequest) {
       message: "⚠️ Withdrawal service temporarily unavailable. Simulated successfully!",
       data: {
         transfer_code: `error_fallback_${Date.now()}`,
-        amount: request.body?.amount || 0,
+        amount: requestAmount,
         fee: 0,
-        net_amount: request.body?.amount || 0,
+        net_amount: requestAmount,
       },
     })
   }

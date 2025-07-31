@@ -2,7 +2,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useCallback, FormEvent } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -87,6 +87,8 @@ export default function EventPage() {
   const params = useParams()
   const searchParams = useSearchParams()
   const paymentStatusParam = searchParams?.get("payment")
+  const paymentRefParam = searchParams?.get("ref");
+  
   const [event, setEvent] = useState<any>(null)
   const [selectedPackage, setSelectedPackage] = useState<any>(null)
   const [giftMessage, setGiftMessage] = useState("")
@@ -106,9 +108,10 @@ export default function EventPage() {
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
 
-  const fetchEventData = useCallback(async () => {
+  const fetchEventData = useCallback(async (id: string | string[] | undefined) => {
+    if(!id) return;
     try {
-      const res = await fetch(`/api/events/${params?.id}`)
+      const res = await fetch(`/api/events/${id}`)
       const data = await res.json()
       if (data.success && data.event) {
         setEvent(data.event)
@@ -148,21 +151,31 @@ export default function EventPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [params?.id]);
+  }, []);
 
   useEffect(() => {
     setIsLoading(true);
-    fetchEventData();
-
-    if (paymentStatusParam === 'success') {
-      setShowSuccess(true);
+    fetchEventData(params?.id);
+    
+    if (paymentStatusParam) {
+      if (paymentStatusParam === 'success') {
+          setPaymentStatus("🎉 Thank you! Your gift has been recorded.");
+          setShowSuccess(true);
+          // Refetch to show updated data immediately
+          fetchEventData(params?.id);
+      } else {
+          setPaymentStatus("⚠️ Payment failed or was cancelled.");
+      }
+      setTimeout(() => setPaymentStatus(""), 6000);
       setTimeout(() => setShowSuccess(false), 5000);
     }
   }, [params?.id, paymentStatusParam, fetchEventData]);
 
+
   const copyLink = () => {
     if (typeof window === "undefined") return
-    navigator.clipboard.writeText(window.location.href)
+    const url = window.location.href.split('?')[0]; // Clean the URL
+    navigator.clipboard.writeText(url);
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -245,7 +258,7 @@ export default function EventPage() {
   const handleImageContextMenu = (e: React.MouseEvent) => e.preventDefault()
 
 
-  if (isLoading) {
+  if (isLoading && !event) { // Only show full-page loader on initial load
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50 flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-purple-600"></div>
@@ -256,9 +269,9 @@ export default function EventPage() {
   if (!event || eventStatus === "expired" || eventStatus === 'cancelled') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50 flex items-center justify-center">
-        <div className="text-center">
+        <div className="text-center p-4">
           <h1 className="text-2xl font-bold mb-4">Event Unavailable</h1>
-          <p className="text-gray-600 mb-4">This event is no longer available. It may have been expired or deleted by the creator.</p>
+          <p className="text-gray-600 mb-4">This event may have expired or been cancelled by the creator.</p>
           <Link href="/">
             <Button>
               <Home className="h-4 w-4 mr-2" /> Go Home
@@ -332,11 +345,11 @@ export default function EventPage() {
         </div>
       )}
 
-      {paymentStatus && (
-        <div className="fixed top-4 left-4 right-4 z-50 bg-blue-500 text-white p-4 rounded-lg shadow-lg text-center">
-          <p className="font-semibold whitespace-pre-line">{paymentStatus}</p>
-        </div>
-      )}
+       {(paymentStatus || isProcessing) && (
+            <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-blue-500 text-white p-4 rounded-lg shadow-lg text-center">
+                <p className="font-semibold whitespace-pre-line">{isProcessing && !paymentStatus ? "Processing..." : paymentStatus}</p>
+            </div>
+        )}
 
       {showImageGallery && selectedImageIndex !== null && event.images && (
         <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center">
@@ -485,21 +498,21 @@ export default function EventPage() {
                     <span className="font-bold">{likeCount}</span>
                 </div>
             </div>
-            <ShareButtons eventLink={typeof window !== 'undefined' ? window.location.href : ''} eventName={event.name} />
+            <ShareButtons eventLink={typeof window !== 'undefined' ? window.location.href.split('?')[0] : ''} eventName={event.name} />
           </div>
         </div>
       </section>
 
       <section className="container mx-auto px-4 py-12">
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold mb-4">Choose Your Gift</h2>
+          <h2 className="text-3xl font-bold mb-4 text-black">Choose Your Gift</h2>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 max-w-4xl mx-auto mb-8">
           {(giftPackages[event.currency as keyof typeof giftPackages] || []).map((pkg) => (
             <Card
               key={pkg.amount}
-              className={`cursor-pointer transition-all duration-200 hover:shadow-lg ${
-                selectedPackage?.amount === pkg.amount ? "ring-2 ring-purple-500 bg-purple-50" : ""
+              className={`cursor-pointer transition-all duration-200 hover:shadow-lg ring-2 ring-purple-500 bg-purple-50 ${
+                selectedPackage?.amount === pkg.amount ? "ring-offset-2" : ""
               }`}
               onClick={() => setSelectedPackage(pkg)}
             >

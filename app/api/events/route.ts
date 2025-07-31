@@ -12,11 +12,12 @@ export async function GET(request: NextRequest) {
       // For creator dashboard, show all events (active, completed, cancelled, expired)
       events = await EventService.getEventsByCreator(createdBy)
     } else if (query) {
-      // For search, only show active events (already handled in EventService.searchEvents)
-      events = await EventService.searchEvents(query)
+      // For search, only show active events (already handled in EventService.searchEvents) - Assuming searchEvents only returns active ones.
+      // If searchEvents needs to include expired events, that logic should be updated in eventService.
+      events = await EventService.searchEvents(query) // Keep original search behavior for now
     } else {
-      // For homepage, only show active, non-expired events
-      events = await EventService.getAllActiveEvents(6)
+      // For homepage, show active and expired events
+      events = await EventService.getPublicEvents(6) // Limit to 6 for homepage as before
     }
 
     // Remove MongoDB _id from each event

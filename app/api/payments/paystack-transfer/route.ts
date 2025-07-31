@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
         type: "mobile_money",
         name: name || "Event Creator",
         account_number: mpesaNumber,
-        bank_code: "MPESA",
+        bank_code: "MPESA", // Standard for M-Pesa in Paystack
         currency: "KES",
       }),
     })
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
 
     if (result.status) {
       // Update gift statuses to 'withdrawn' in the database
-      const updateSuccess = await EventService.updateManyGiftStatuses(
+      const updateSuccess = await EventService.updateGiftStatuses( // Changed to updateGiftStatuses
         eventId,
         giftIds,
         "withdrawn"

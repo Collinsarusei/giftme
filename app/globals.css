@@ -1,3 +1,6 @@
+/* app/globals.css */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -64,59 +67,26 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans; /* Apply font-sans here */
   }
 }
 
-/* Mobile responsive improvements */
-@media (max-width: 768px) {
-  /* Improve touch targets */
-  button {
-    min-height: 44px;
-  }
+/* 
+  Removed extensive custom @media queries. 
+  Instead, rely on Tailwind's built-in responsive utilities directly in components. 
+  Kept only critical non-Tailwind specific overrides or accessibility improvements.
+*/
 
-  /* Better spacing on mobile */
-  .container {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-
-  /* Responsive text sizes */
-  h1 {
-    font-size: 2rem;
-    line-height: 2.5rem;
-  }
-
-  h2 {
-    font-size: 1.5rem;
-    line-height: 2rem;
-  }
-
-  /* Improve form inputs on mobile */
-  input,
-  textarea,
-  select {
-    font-size: 16px; /* Prevents zoom on iOS */
-  }
-
-  /* Better card spacing */
-  .card {
-    margin-bottom: 1rem;
-  }
-
-  /* Responsive grid adjustments */
-  .grid {
-    gap: 0.75rem;
-  }
+/* Improve touch targets for all buttons */
+button {
+  min-height: 44px;
 }
 
-/* Dialog improvements for mobile */
-@media (max-width: 640px) {
-  [role="dialog"] {
-    margin: 1rem;
-    max-width: calc(100vw - 2rem);
-    max-height: calc(100vh - 2rem);
-  }
+/* Improve form inputs on mobile to prevent zoom on iOS */
+input,
+textarea,
+select {
+  font-size: 16px;
 }
 
 /* Ensure dialogs are scrollable */
@@ -125,29 +95,12 @@
   overflow-y: auto;
 }
 
-/* Improve mobile navigation */
-@media (max-width: 640px) {
-  .flex-col.sm\\:flex-row {
-    gap: 0.5rem;
-  }
-
-  .flex-col.sm\\:flex-row > * {
-    width: 100%;
-  }
+/* Fix dialog content accessibility */
+[role="dialog"] {
+  outline: none;
 }
 
-/* Better mobile image handling */
-@media (max-width: 768px) {
-  .aspect-video {
-    aspect-ratio: 16 / 9;
-  }
-
-  .object-cover {
-    object-fit: cover;
-  }
-}
-
-/* Suppress Monaco Editor warnings */
+/* Suppress Monaco Editor warnings - assuming this is still needed */
 .monaco-editor {
   --monaco-monospace-font: "SF Mono", Monaco, Inconsolata, "Roboto Mono", Consolas, "Courier New", monospace;
 }
@@ -163,53 +116,4 @@ link[rel="preload"] {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-/* Fix dialog content accessibility */
-[role="dialog"] {
-  outline: none;
-}
-
-/* Improve mobile performance */
-@media (max-width: 768px) {
-  .animate-bounce {
-    animation-duration: 2s;
-  }
-
-  .transition-transform {
-    transition-duration: 200ms;
-  }
-
-  /* Reduce motion for better performance */
-  .group-hover\\:scale-105 {
-    transform: scale(1.02);
-  }
-}
-
-/* Mobile-first responsive utilities */
-.mobile-padding {
-  padding: 1rem;
-}
-
-@media (min-width: 640px) {
-  .mobile-padding {
-    padding: 1.5rem;
-  }
-}
-
-@media (min-width: 768px) {
-  .mobile-padding {
-    padding: 2rem;
-  }
-}
-
-/* Improve touch interactions */
-@media (hover: none) and (pointer: coarse) {
-  .hover\\:shadow-lg:hover {
-    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.05);
-  }
-
-  .hover\\:scale-105:hover {
-    transform: scale(1.02);
-  }
 }

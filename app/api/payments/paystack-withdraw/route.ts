@@ -1,124 +1,121 @@
+// app/api/payments/paystack-withdraw/route.ts
 import { type NextRequest, NextResponse } from "next/server"
+import { EventService } from "@/lib/services/eventService"
+import { PlatformFeeService } from "@/lib/services/platformFeeService"
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY
+const PLATFORM_FEE_PERCENTAGE = 0.03 // 3%
+const PAYSTACK_TRANSFER_FEE_KES = 20 // KES
 
-// Paystack withdrawal fee calculation
-function calculateWithdrawalFee(amount: number, currency = "NGN"): number {
-  // Paystack transfer fees (as of 2024)
-  if (currency === "NGN") {
-    if (amount <= 5000) return 10
-    if (amount <= 50000) return 25
-    return 50
+async function getOrCreateRecipient(
+  name: string,
+  mpesaNumber: string,
+  currency: string
+): Promise<string> {
+  // 1. Create a Transfer Recipient with Paystack
+  const recipientResponse = await fetch("https://api.paystack.co/transferrecipient", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      type: "mobile_money",
+      name: name,
+      account_number: mpesaNumber,
+      bank_code: "MPESA", // Changed from MTN to MPESA
+      currency: currency.toUpperCase(),
+    }),
+  })
+
+  const recipientResult = await recipientResponse.json()
+
+  if (!recipientResult.status || !recipientResult.data.recipient_code) {
+    throw new Error(recipientResult.message || "Failed to create transfer recipient.")
   }
 
-  // For other currencies, use a percentage
-  return Math.max(amount * 0.015, 1) // 1.5% with minimum of 1 unit
+  return recipientResult.data.recipient_code
 }
 
 export async function POST(request: NextRequest) {
-  let body: any;
   try {
-    body = await request.json()
-    const { giftId, eventId, recipientCode, amount, currency = "NGN", reason } = body
+    let {
+      eventId,
+      giftIds,
+      recipientCode, // This might be null on the first withdrawal
+      amount, // Changed from grossAmount to amount
+      currency = "KES",
+      reason,
+      // We now accept these fields to create a recipient if one doesn't exist
+      name,
+      mpesaNumber,
+    } = await request.json()
 
-    console.log("=== Paystack Withdrawal Request ===")
-    console.log("Gift ID:", giftId)
-    console.log("Amount:", amount, currency)
-
-    if (!PAYSTACK_SECRET_KEY) {
-      return NextResponse.json({
-        success: true,
-        isTestMode: true,
-        message: "⚠️ Paystack not configured. Withdrawal simulated successfully!",
-        data: {
-          transfer_code: `test_transfer_${Date.now()}`,
-          amount: amount,
-          fee: calculateWithdrawalFee(amount, currency),
-          net_amount: amount - calculateWithdrawalFee(amount, currency),
-        },
-      })
+    // --- Validation ---
+    if (!eventId || !giftIds || !amount || (!recipientCode && !mpesaNumber)) { // Changed grossAmount to amount
+      return NextResponse.json({ success: false, message: "Missing required fields for withdrawal." }, { status: 400 })
     }
 
-    // Calculate withdrawal fee
-    const withdrawalFee = calculateWithdrawalFee(amount, currency)
-    const netAmount = amount - withdrawalFee
+    // --- Recipient Handling ---
+    if (!recipientCode && mpesaNumber && name) {
+      console.log("No recipient code found, creating a new one...");
+      recipientCode = await getOrCreateRecipient(name, mpesaNumber, currency);
+      // Save the new recipient code back to the event for future use
+      await EventService.updateEventRecipientCode(eventId, recipientCode);
+      console.log(`New recipient code ${recipientCode} saved for event ${eventId}.`);
+    } else if (!recipientCode) {
+        return NextResponse.json({ success: false, message: "A valid recipient or M-Pesa number is required." }, { status: 400 });
+    }
+
+    // --- Fee Calculation ---
+    const platformFee = amount * PLATFORM_FEE_PERCENTAGE // Changed grossAmount to amount
+    const transactionFee = currency.toUpperCase() === "KES" ? PAYSTACK_TRANSFER_FEE_KES : 0
+    const netAmount = amount - platformFee - transactionFee // Changed grossAmount to amount
 
     if (netAmount <= 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Amount too small after fees. Minimum withdrawal amount not met.",
-        },
-        { status: 400 },
-      )
+      return NextResponse.json({ success: false, message: "Net withdrawal amount is too low after fees." }, { status: 400 })
     }
 
-    // Create transfer
-    const transferData = {
-      source: "balance",
-      amount: netAmount * 100, // Amount in kobo/cents
-      recipient: recipientCode,
-      reason: reason || `Withdrawal for event gift`,
-      currency: currency.toUpperCase(),
-      reference: `CWM_WD_${giftId}_${Date.now()}`,
-    }
-
-    console.log("📤 Paystack transfer request:", transferData)
-
-    const response = await fetch("https://api.paystack.co/transfer", {
+    // --- Paystack Transfer ---
+    const transferResponse = await fetch("https://api.paystack.co/transfer", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${PAYSTACK_SECRET_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(transferData),
+      body: JSON.stringify({
+        source: "balance",
+        amount: Math.round(netAmount * 100),
+        recipient: recipientCode,
+        reason: reason || `Withdrawal for event ${eventId}`,
+        currency: currency.toUpperCase(),
+      }),
     })
 
-    const result = await response.json()
-    console.log("📥 Paystack transfer response:", result)
+    const transferResult = await transferResponse.json()
 
-    if (result.status) {
-      return NextResponse.json({
-        success: true,
-        message: "💸 Withdrawal initiated successfully!",
-        data: {
-          transfer_code: result.data.transfer_code,
-          amount: amount,
-          fee: withdrawalFee,
-          net_amount: netAmount,
-          status: result.data.status,
-          reference: result.data.reference,
-        },
-      })
-    } else {
-      // Fallback to test mode if API fails
-      return NextResponse.json({
-        success: true,
-        isTestMode: true,
-        message: "⚠️ Paystack API unavailable. Withdrawal simulated successfully!",
-        data: {
-          transfer_code: `fallback_${Date.now()}`,
-          amount: amount,
-          fee: withdrawalFee,
-          net_amount: netAmount,
-        },
-      })
+    if (!transferResult.status || (transferResult.data.status !== 'pending' && transferResult.data.status !== 'success')) {
+      return NextResponse.json( { success: false, message: transferResult.message || "Failed to initiate transfer." }, { status: 500 } )
     }
-  } catch (error) {
-    console.error("❌ Paystack withdrawal error:", error)
 
-    const requestAmount = body?.amount || 0
-    // Always fallback to test mode to not block users
+    // --- Database Updates ---
+    await EventService.updateGiftStatuses(eventId, giftIds, "withdrawn")
+    await PlatformFeeService.recordFee({
+      eventId: eventId,
+      amount: platformFee,
+      currency: currency,
+      timestamp: new Date(),
+      relatedTransactionId: transferResult.data.transfer_code,
+    })
+
     return NextResponse.json({
       success: true,
-      isTestMode: true,
-      message: "⚠️ Withdrawal service temporarily unavailable. Simulated successfully!",
-      data: {
-        transfer_code: `error_fallback_${Date.now()}`,
-        amount: requestAmount,
-        fee: 0,
-        net_amount: requestAmount,
-      },
+      message: "Withdrawal initiated successfully!",
+      data: transferResult.data,
     })
+  } catch (error) {
+    console.error("Paystack withdrawal error:", error)
+    const errorMessage = error instanceof Error ? error.message : "An internal server error occurred."
+    return NextResponse.json({ success: false, message: errorMessage }, { status: 500 })
   }
 }

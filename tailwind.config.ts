@@ -18,6 +18,9 @@ const config: Config = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'sans-serif'], // Add Inter to sans font family
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

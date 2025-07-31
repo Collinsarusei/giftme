@@ -37,6 +37,7 @@ export default function DashboardPage() {
   const [selectedEventId, setSelectedEventId] = useState<string>("")
   const [selectedEvent, setSelectedEvent] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [currentUser, setCurrentUser] = useState<any>(null) // State for current user
   const [availableBalance, setAvailableBalance] = useState(0)
   const [isWithdrawing, setIsWithdrawing] = useState(false)
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
@@ -45,52 +46,51 @@ export default function DashboardPage() {
   const PLATFORM_FEE_PERCENTAGE = 0.03 // 3%
   const PAYSTACK_TRANSFER_FEE_KES = 20 // KES
 
-  // ... (useEffect remains the same)
+  // Effect to fetch current user and then events
   useEffect(() => {
-    async function fetchUserEvents() {
-      setIsLoading(true)
-      let currentUser = null
-      if (typeof window !== "undefined") {
-        currentUser = JSON.parse(localStorage.getItem("currentUser") || "{}")
-      }
-
-      if (!currentUser || !currentUser.username) {
-        setIsLoading(false)
-        router.push("/auth")
-        return
-      }
-
+    async function authenticateUserAndFetchEvents() {
+      setIsLoading(true);
       try {
-        const res = await fetch(`/api/events?createdBy=${currentUser.username}`)
-        const data = await res.json()
-        if (data.success) {
-          const myEvents = data.events.filter((event: any) => event.status !== 'cancelled')
-          setUserEvents(myEvents)
+        const authRes = await fetch("/api/auth/me");
+        const authData = await authRes.json();
 
-          let initialSelectedEvent = null
-          if (withdrawalEventId) {
-            initialSelectedEvent = myEvents.find((e: any) => e.id === withdrawalEventId)
-          } else if (myEvents.length > 0) {
-            initialSelectedEvent = myEvents[0]
-          }
+        if (authData.success && authData.user) {
+          setCurrentUser(authData.user);
+          // Fetch user events only after successful authentication
+          const res = await fetch(`/api/events?createdBy=${authData.user.username}`);
+          const data = await res.json();
+          if (data.success) {
+            const myEvents = data.events.filter((event: any) => event.status !== 'cancelled');
+            setUserEvents(myEvents);
 
-          if (initialSelectedEvent) {
-            setSelectedEventId(initialSelectedEvent.id)
-            setSelectedEvent(initialSelectedEvent)
+            let initialSelectedEvent = null;
+            if (withdrawalEventId) {
+              initialSelectedEvent = myEvents.find((e: any) => e.id === withdrawalEventId);
+            } else if (myEvents.length > 0) {
+              initialSelectedEvent = myEvents[0];
+            }
+
+            if (initialSelectedEvent) {
+              setSelectedEventId(initialSelectedEvent.id);
+              setSelectedEvent(initialSelectedEvent);
+            }
           }
+        } else {
+          router.push("/auth"); // Redirect to login if not authenticated
         }
       } catch (error) {
-        console.error("Error loading dashboard:", error)
+        console.error("Error during authentication or fetching dashboard data:", error);
+        router.push("/auth"); // Redirect on any auth/fetch error
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
     }
-    fetchUserEvents()
-  }, [withdrawalEventId, router])
+    authenticateUserAndFetchEvents();
+  }, [withdrawalEventId, router]);
 
   useEffect(() => {
     if (selectedEvent) {
-      const eventPendingGifts = selectedEvent.gifts.filter(
+      const eventPendingGifts = (selectedEvent.gifts || []).filter(
         (gift: any) => gift.paymentMethod === "paystack" && gift.status === "pending_withdrawal"
       )
       const balance = eventPendingGifts.reduce((sum: number, gift: any) => sum + gift.amount, 0)
@@ -106,16 +106,25 @@ export default function DashboardPage() {
     setSelectedEvent(event)
   }
   
-  const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-        localStorage.removeItem('currentUser');
-        router.push('/');
+  const handleLogout = async () => {
+    try {
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setCurrentUser(null); // Clear user state
+        router.push('/'); // Redirect to homepage
+      } else {
+        alert(data.message || "Logout failed.");
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+      alert("An error occurred during logout.");
     }
-  }
+  };
 
   const handleDeleteEvent = async (eventId: string) => {
     // Safety Check: Prevent deletion if there are pending withdrawals
-    const hasPendingWithdrawals = selectedEvent.gifts.some((gift: any) => gift.status === 'pending_withdrawal');
+    const hasPendingWithdrawals = selectedEvent?.gifts?.some((gift: any) => gift.status === 'pending_withdrawal') || false;
     if (hasPendingWithdrawals) {
         alert("This event cannot be deleted because there are pending withdrawals. Please withdraw all available funds first.");
         return;
@@ -157,39 +166,36 @@ export default function DashboardPage() {
     setIsWithdrawing(true)
     setWithdrawalMessage("Initiating withdrawal...")
 
-    const netAmountAfterPlatformFee = availableBalance * (1 - PLATFORM_FEE_PERCENTAGE)
-    const finalPayout = netAmountAfterPlatformFee - PAYSTACK_TRANSFER_FEE_KES
-
-    if (finalPayout <= 0) {
-      setWithdrawalMessage("❌ Net withdrawal amount is too low after fees.")
-      setIsWithdrawing(false)
-      return
-    }
-
+    // The front-end should just send the gross amount and identifiers.
+    // The server will handle all fee calculations.
     try {
-        const giftIdsToWithdraw = selectedEvent.gifts
+        const giftIdsToWithdraw = (selectedEvent.gifts || [])
             .filter((g: any) => g.status === 'pending_withdrawal')
             .map((g: any) => g.id);
 
-      const res = await fetch("/api/payments/paystack-transfer", {
+      // Call the new, more secure withdrawal endpoint
+      const res = await fetch("/api/payments/paystack-withdraw", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: finalPayout,
-          name: selectedEvent.creatorName,
-          mpesaNumber: selectedEvent.mpesaNumber,
+          amount: availableBalance, // Send the full amount as 'amount'
+          name: selectedEvent.name, // Add the event name
+          mpesaNumber: selectedEvent.mpesaNumber, // Use mpesaNumber as requested
           reason: `Withdrawal for ${selectedEvent.name}`,
           giftIds: giftIdsToWithdraw,
           eventId: selectedEvent.id,
+          currency: selectedEvent.currency || "KES",
         }),
       })
+
       const data = await res.json()
+
       if (data.success) {
-        setWithdrawalMessage("✅ Withdrawal successful! Check your M-Pesa.")
-        // Refresh data
+        setWithdrawalMessage("✅ Withdrawal successfully initiated!")
+        // Refresh data by re-fetching or updating the local state accurately
         const updatedEvents = userEvents.map(event => 
             event.id === selectedEvent.id 
-                ? { ...event, gifts: event.gifts.map((g: any) => giftIdsToWithdraw.includes(g.id) ? {...g, status: 'withdrawn'} : g) }
+                ? { ...event, gifts: (event.gifts || []).map((g: any) => giftIdsToWithdraw.includes(g.id) ? {...g, status: 'withdrawn'} : g) }
                 : event
         );
         setUserEvents(updatedEvents);
@@ -199,7 +205,8 @@ export default function DashboardPage() {
         setWithdrawalMessage(`❌ Withdrawal failed: ${data.message}`)
       }
     } catch (error) {
-      setWithdrawalMessage("❌ An unexpected error occurred.")
+      const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred.";
+      setWithdrawalMessage(`❌ ${errorMessage}`)
     } finally {
       setIsWithdrawing(false)
       setTimeout(() => setWithdrawalMessage(""), 5000)
@@ -225,9 +232,10 @@ export default function DashboardPage() {
     )
   }
 
+  // UI display calculations can remain for user clarity, but aren't used for the API call
   const platformFee = availableBalance * PLATFORM_FEE_PERCENTAGE
   const finalPayout = availableBalance - platformFee - PAYSTACK_TRANSFER_FEE_KES
-  const hasPendingWithdrawals = selectedEvent?.gifts.some((gift: any) => gift.status === 'pending_withdrawal');
+  const hasPendingWithdrawals = selectedEvent?.gifts?.some((gift: any) => gift.status === 'pending_withdrawal') || false;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50">
@@ -246,7 +254,7 @@ export default function DashboardPage() {
       </header>
 
       <div className="container mx-auto px-4 py-8">
-        {userEvents.length > 0 ? (
+        {currentUser && userEvents.length > 0 ? (
           <>
             <div className="mb-6">
               <Select value={selectedEventId} onValueChange={handleEventChange}>
@@ -273,7 +281,7 @@ export default function DashboardPage() {
                             <CardDescription>Event Status: <Badge>{selectedEvent.status}</Badge></CardDescription>
                         </CardHeader>
                         <CardContent className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-                            <div className="text-center"><DollarSign className="mx-auto h-6 w-6 text-green-500"/><p className="font-bold text-lg">{selectedEvent.raised.toLocaleString()}</p><p className="text-sm text-gray-500">Raised</p></div>
+                            <div className="text-center"><DollarSign className="mx-auto h-6 w-6 text-green-500"/><p className="font-bold text-lg">{(selectedEvent.raised || 0).toLocaleString()}</p><p className="text-sm text-gray-500">Raised</p></div>
                             <div className="text-center"><Gift className="mx-auto h-6 w-6 text-blue-500"/><p className="font-bold text-lg">{selectedEvent.giftCount}</p><p className="text-sm text-gray-500">Gifts</p></div>
                             <div className="text-center"><Eye className="mx-auto h-6 w-6 text-purple-500"/><p className="font-bold text-lg">{selectedEvent.views}</p><p className="text-sm text-gray-500">Views</p></div>
                             <div className="text-center"><Heart className="mx-auto h-6 w-6 text-red-500"/><p className="font-bold text-lg">{selectedEvent.likes || 0}</p><p className="text-sm text-gray-500">Likes</p></div>
@@ -310,13 +318,13 @@ export default function DashboardPage() {
                         <CardHeader><CardTitle>Gifts Received</CardTitle></CardHeader>
                         <CardContent>
                             <div className="space-y-2 max-h-96 overflow-y-auto">
-                                {selectedEvent.gifts.length > 0 ? selectedEvent.gifts.sort((a:any, b:any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((gift: any) => (
+                                {((selectedEvent?.gifts || []).length > 0) ? (selectedEvent.gifts || []).sort((a:any, b:any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((gift: any) => (
                                     <div key={gift.id} className="p-2 border rounded-md flex justify-between items-center">
                                         <div>
                                             <p className="font-semibold">{gift.from} - KES {gift.amount}</p>
-                                            <p className="text-sm text-gray-500">{gift.message}</p>
+                                            <p className="text-sm text-gray-500">{(new Date(gift.timestamp)).toLocaleString()}</p>
                                         </div>
-                                        <Badge variant={getStatusVariant(gift.status)}>{gift.status.replace('_', ' ')}</Badge>
+                                        <Badge variant={getStatusVariant(gift.status)}>{gift.status.replace(/_/g, ' ')}</Badge>
                                     </div>
                                 )) : <p>No gifts received for this event yet.</p>}
                             </div>
@@ -346,7 +354,11 @@ export default function DashboardPage() {
                             <Button onClick={handlePaystackWithdrawal} disabled={isWithdrawing || finalPayout <= 0} className="w-full">
                                 {isWithdrawing ? 'Withdrawing...' : <><Download className="mr-2 h-4 w-4"/> Withdraw Funds</>}
                             </Button>
-                            {withdrawalMessage && <p className="text-center text-sm font-semibold mt-2">{withdrawalMessage}</p>}
+                            {withdrawalMessage && <p className="text-center text-sm font-semibold mt-2">{
+                                withdrawalMessage === "✅ Withdrawal successfully initiated!" ? 
+                                    <span className="text-green-600">{withdrawalMessage}</span> : 
+                                    <span className="text-red-600">{withdrawalMessage}</span>
+                            }</p>}
                         </div>
                     </CardContent>
                   </Card>

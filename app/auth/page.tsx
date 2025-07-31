@@ -38,16 +38,16 @@ export default function AuthPage() {
 
       const data = await response.json()
 
-      if (data.success) {
-        localStorage.setItem("currentUser", JSON.stringify(data.user))
-        // Redirect to admin or dashboard
-        if(data.user.email === ADMIN_EMAIL) {
+      if (response.ok && data.success) {
+        // localStorage.setItem("currentUser", JSON.stringify(data.user)); // REMOVED: Data will be managed via server-side session/cookie
+        // Redirect to admin or dashboard based on the server response (assuming the server sets a cookie)
+        if(data.user && data.user.email === ADMIN_EMAIL) {
             router.push("/admin")
         } else {
             router.push("/dashboard")
         }
       } else {
-        alert(data.message)
+        alert(data.message || "Login failed.")
       }
     } catch (error) {
       console.error("Login error:", error)
@@ -85,12 +85,12 @@ export default function AuthPage() {
 
       const data = await response.json()
 
-      if (data.success) {
-        localStorage.setItem("currentUser", JSON.stringify(data.user))
-        alert(data.message)
+      if (response.ok && data.success) {
+        // localStorage.setItem("currentUser", JSON.stringify(data.user)); // REMOVED: Data will be managed via server-side session/cookie
+        alert(data.message || "Registration successful!")
         router.push("/dashboard")
       } else {
-        alert(data.message)
+        alert(data.message || "Registration failed.")
       }
     } catch (error) {
       console.error("Registration error:", error)

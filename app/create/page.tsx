@@ -36,15 +36,24 @@ export default function CreateEventPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
-    // Check if user is authenticated
-    const user = JSON.parse(localStorage.getItem("currentUser") || "{}")
-    if (!user.username) {
-      router.push("/auth")
-      return
+    async function fetchCurrentUser() {
+      try {
+        const authRes = await fetch("/api/auth/me");
+        const authData = await authRes.json();
+
+        if (authData.success && authData.user) {
+          setCurrentUser(authData.user);
+          setFormData((prev) => ({ ...prev, userName: authData.user.username }));
+        } else {
+          router.push("/auth"); // Redirect to login if not authenticated
+        }
+      } catch (error) {
+        console.error("Error fetching current user:", error);
+        router.push("/auth"); // Redirect on any auth error
+      }
     }
-    setCurrentUser(user)
-    setFormData((prev) => ({ ...prev, userName: user.username }))
-  }, [router])
+    fetchCurrentUser();
+  }, [router]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])

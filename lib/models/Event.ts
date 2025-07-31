@@ -42,7 +42,7 @@ export interface Event {
   creatorName: string
   createdBy: string
   gifts: Gift[]
-  status: "active" | "completed" | "cancelled" | "expired"
+  status: "active" | "completed" | "cancelled" | "expired" | "deleted"
   expiresAt: string
   likes: number; // New field for likes
   comments: Comment[]; // New field for comments

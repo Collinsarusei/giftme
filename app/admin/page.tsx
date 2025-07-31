@@ -43,42 +43,44 @@ export default function AdminDashboardPage() {
   const [statusMessage, setStatusMessage] = useState('');
 
   useEffect(() => {
-    let user = null;
-    if (typeof window !== 'undefined') {
-      user = JSON.parse(localStorage.getItem('currentUser') || '{}');
-    }
-    
-    if (!user || user.email !== ADMIN_EMAIL) {
-      router.push('/auth');
-      return;
-    }
-    setCurrentUser(user);
-
-    const fetchData = async () => {
+    async function fetchAdminData() {
+      setIsLoading(true);
+      let user = null;
       try {
-        const [projectsRes, giftsRes, feesRes] = await Promise.all([
-          fetch('/api/projects'),
-          fetch('/api/admin/gifts', { headers: { 'x-user-email': user.email }}),
-          fetch('/api/admin/platform-fees', { headers: { 'x-user-email': user.email }})
-        ]);
+        const authRes = await fetch("/api/auth/me");
+        const authData = await authRes.json();
         
-        const projectsData = await projectsRes.json();
-        if (projectsData.success) setProjects(projectsData.projects);
+        if (authData.success && authData.user && authData.user.email === ADMIN_EMAIL) {
+          user = authData.user;
+          setCurrentUser(user);
 
-        const giftsData = await giftsRes.json();
-        if (giftsData.success) setGifts(giftsData.gifts);
+          const [projectsRes, giftsRes, feesRes] = await Promise.all([
+            fetch('/api/projects'),
+            fetch('/api/admin/gifts', { headers: { 'x-user-email': user.email }}),
+            fetch('/api/admin/platform-fees', { headers: { 'x-user-email': user.email }})
+          ]);
+          
+          const projectsData = await projectsRes.json();
+          if (projectsData.success) setProjects(projectsData.projects);
 
-        const feesData = await feesRes.json();
-        if (feesData.success) setPlatformFees(feesData.totalPlatformFee);
+          const giftsData = await giftsRes.json();
+          if (giftsData.success) setGifts(giftsData.gifts);
 
+          const feesData = await feesRes.json();
+          if (feesData.success) setPlatformFees(feesData.totalPlatformFee);
+
+        } else {
+          router.push('/auth'); // Redirect if not authenticated or not admin
+        }
       } catch (error) {
         console.error("Failed to fetch admin data:", error);
+        router.push('/auth'); // Redirect on error
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchData();
+    fetchAdminData();
   }, [router]);
   
   // ... (rest of the component logic remains the same)
@@ -95,7 +97,7 @@ export default function AdminDashboardPage() {
             headers: { 
                 'Content-Type': 'application/json',
                 // Using email for security check now
-                'x-user': JSON.stringify(currentUser) 
+                'x-user-email': currentUser.email // Changed from x-user to x-user-email
             },
             body: JSON.stringify(newProject),
         });
@@ -117,7 +119,7 @@ export default function AdminDashboardPage() {
     try {
         const res = await fetch(`/api/projects/${id}`, {
             method: 'DELETE',
-            headers: { 'x-user': JSON.stringify(currentUser) },
+            headers: { 'x-user-email': currentUser.email }, // Changed from x-user to x-user-email
         });
         const data = await res.json();
         if(data.success) {
@@ -168,12 +170,21 @@ export default function AdminDashboardPage() {
       }
   }
 
-  const handleLogout = () => {
-    if (typeof window !== 'undefined') {
-        localStorage.removeItem('currentUser');
+  const handleLogout = async () => {
+    try {
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setCurrentUser(null); 
         router.push('/');
+      } else {
+        alert(data.message || "Logout failed.");
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+      alert("An error occurred during logout.");
     }
-  }
+  };
 
   if (isLoading || !currentUser) {
     return <div className="flex h-screen items-center justify-center"><Loader2 className="h-12 w-12 animate-spin"/></div>;

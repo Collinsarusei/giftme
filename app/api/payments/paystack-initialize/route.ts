@@ -3,6 +3,25 @@ import { type NextRequest, NextResponse } from "next/server"
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY
 
+// Helper function to dynamically determine the base URL
+const getBaseUrl = (req: NextRequest): string => {
+    // Prefer the x-forwarded-host header if available (common in proxies)
+    const forwardedHost = req.headers.get('x-forwarded-host');
+    if (forwardedHost) {
+        return `https://${forwardedHost}`;
+    }
+    // Fallback to the host header
+    const host = req.headers.get('host');
+    if (host) {
+        // For localhost, we need to ensure it's http
+        const protocol = host.includes('localhost') ? 'http' : 'https';
+        return `${protocol}://${host}`;
+    }
+    // Final fallback to the request's URL origin
+    return new URL(req.url).origin;
+}
+
+
 export async function POST(request: NextRequest) {
   try {
     const { amount, email, eventName, currency = "KES", eventId, giftData } = await request.json()
@@ -26,8 +45,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "Please enter a valid email address" }, { status: 400 })
     }
 
+    const baseUrl = getBaseUrl(request);
     const reference = `CWM_${eventId}_${Date.now()}`
-    const callback_url = `${process.env.NEXT_PUBLIC_BASE_URL}/event/${eventId}?payment=success&ref=${reference}`
+    
+    // **FIX:** Point the callback to our single, reliable API route
+    const callback_url = `${baseUrl}/api/payments/paystack-callback?reference=${reference}&eventId=${eventId}`
 
     const paystackData = {
       amount: Math.round(amount * 100), // Amount in kobo/cents
@@ -40,17 +62,13 @@ export async function POST(request: NextRequest) {
         eventName,
         from: giftData.from,
         message: giftData.message,
+        // Pass eventId in metadata as a fallback
         custom_fields: [
           {
-            display_name: "Event Name",
-            variable_name: "event_name",
-            value: eventName,
-          },
-          {
-            display_name: "Sent From",
-            variable_name: "sent_from",
-            value: giftData.from,
-          },
+            display_name: "Event ID",
+            variable_name: "event_id",
+            value: eventId,
+          }
         ],
       },
     }
@@ -69,12 +87,7 @@ export async function POST(request: NextRequest) {
     if (result.status) {
       return NextResponse.json({
         success: true,
-        message: "Payment initialization successful",
-        data: {
-          authorization_url: result.data.authorization_url,
-          access_code: result.data.access_code,
-          reference: result.data.reference,
-        },
+        data: result.data,
       })
     } else {
       console.error("Paystack initialization failed:", result)

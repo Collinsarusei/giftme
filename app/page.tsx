@@ -28,34 +28,36 @@ const HomePage = () => {
   )
 
   useEffect(() => {
-    // Check for current user from localStorage
-    if (typeof window !== "undefined") {
-      const user = localStorage.getItem("currentUser")
-      if (user) {
-        setCurrentUser(JSON.parse(user))
-      }
-    }
-
-    async function fetchEvents() {
-      setIsLoading(true)
+    async function fetchInitialData() {
+      setIsLoading(true);
       try {
-        // Fetch events from API
-        const res = await fetch(`/api/events`)
-        const data = await res.json()
-        if (data.success) {
-          setSampleEvents(data.events)
+        // Fetch current user from API
+        const authRes = await fetch("/api/auth/me");
+        const authData = await authRes.json();
+        if (authData.success && authData.user) {
+          setCurrentUser(authData.user);
         } else {
-          setSampleEvents([])
+          setCurrentUser(null);
+        }
+
+        // Fetch events from API
+        const eventRes = await fetch(`/api/events`);
+        const eventData = await eventRes.json();
+        if (eventData.success) {
+          setSampleEvents(eventData.events);
+        } else {
+          setSampleEvents([]);
         }
       } catch (error) {
-        console.error("Error loading events:", error)
-        setSampleEvents([])
+        console.error("Error loading initial data:", error);
+        setCurrentUser(null);
+        setSampleEvents([]);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
     }
-    fetchEvents()
-  }, [])
+    fetchInitialData();
+  }, []);
 
 
   return (
@@ -70,7 +72,7 @@ const HomePage = () => {
         </div>
         <div className="flex items-center gap-4">
           <Link href="/support-developer">
-            <Button variant="outline" size="sm" className="gap-2 bg-transparent">
+            <Button variant="outline" size="sm" className="gap-2 bg-black text-white hover:bg-gray-800">
               <Heart className="h-4 w-4" />
               Support Developer
             </Button>
@@ -119,7 +121,7 @@ const HomePage = () => {
             <Button
               variant="outline"
               size="lg"
-              className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg bg-transparent"
+              className="w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 text-base sm:text-lg bg-black text-white hover:bg-gray-800"
             >
               View Sample Events
             </Button>

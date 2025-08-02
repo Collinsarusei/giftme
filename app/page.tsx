@@ -9,7 +9,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { useEffect, useState } from "react"
 import { Input } from "@/components/ui/input"
-import { InstallPWA } from "@/components/ui/install-pwa" // Import the new component
+import { InstallPWA } from "@/components/ui/install-pwa"
 
 const HomePage = () => {
   const [sampleEvents, setSampleEvents] = useState<any[]>([])
@@ -17,8 +17,6 @@ const HomePage = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
 
-  // ... (useEffect and other functions remain the same)
-  // Filter events based on search query and expiration
   const filteredEvents = sampleEvents.filter(
     (event: any) =>
       (event.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -31,7 +29,6 @@ const HomePage = () => {
     async function fetchInitialData() {
       setIsLoading(true);
       try {
-        // Fetch current user from API
         const authRes = await fetch("/api/auth/me");
         const authData = await authRes.json();
         if (authData.success && authData.user) {
@@ -40,7 +37,6 @@ const HomePage = () => {
           setCurrentUser(null);
         }
 
-        // Fetch events from API
         const eventRes = await fetch(`/api/events`);
         const eventData = await eventRes.json();
         if (eventData.success) {
@@ -62,31 +58,30 @@ const HomePage = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50">
-      {/* ... (Header, Hero, etc. remain the same) ... */}
-      <header className="container mx-auto px-4 py-6 flex justify-between items-center">
+      <header className="container mx-auto px-4 sm:px-6 py-4 flex flex-wrap justify-between items-center gap-4">
         <div className="flex items-center gap-2">
           <Gift className="h-8 w-8 text-purple-600" />
-          <span className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+          <span className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
             CelebrateWith.me
           </span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           <Link href="/support-developer">
-            <Button variant="outline" size="sm" className="gap-2 bg-black text-white hover:bg-gray-800">
+            <Button variant="outline" size="sm" className="gap-2 bg-black text-white hover:bg-gray-800 text-xs sm:text-sm">
               <Heart className="h-4 w-4" />
-              Support Developer
+              Support
             </Button>
           </Link>
           {currentUser ? (
             <Link href="/dashboard">
-              <Button size="sm" className="gap-2">
+              <Button size="sm" className="gap-2 text-xs sm:text-sm">
                 <User className="h-4 w-4" />
                 {currentUser.username}
               </Button>
             </Link>
           ) : (
             <Link href="/auth">
-              <Button size="sm" className="gap-2">
+              <Button size="sm" className="gap-2 text-xs sm:text-sm">
                 <User className="h-4 w-4" />
                 Login
               </Button>
@@ -104,7 +99,7 @@ const HomePage = () => {
           <h1 className="text-3xl sm:text-4xl md:text-6xl font-bold mb-4 sm:mb-6 bg-gradient-to-r from-purple-600 via-pink-600 to-yellow-600 bg-clip-text text-transparent">
             Turn Every Celebration Into a Gift-Giving Experience
           </h1>
-          <p className="text-lg sm:text-xl text-gray-600 mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
+          <p className="text-base sm:text-lg text-gray-600 mb-6 sm:mb-8 max-w-2xl mx-auto px-4">
             Create beautiful event pages for birthdays, graduations, weddings, and more. Let friends and family
             celebrate with you by sending monetary gifts securely.
           </p>
@@ -258,8 +253,6 @@ const HomePage = () => {
         </div>
       </section>
       
-      {/* CTA and Footer... (Keep as is) */}
-       {/* CTA Section */}
        <section className="container mx-auto px-4 py-16 text-center">
         <div className="max-w-2xl mx-auto">
           <h2 className="text-3xl font-bold mb-4">Ready to Create Your Event?</h2>

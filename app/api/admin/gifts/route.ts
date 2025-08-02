@@ -1,6 +1,7 @@
 // app/api/admin/gifts/route.ts
 import { type NextRequest, NextResponse } from "next/server"
 import { getCollection } from "@/lib/mongodb"
+import { DeveloperGiftService } from "@/lib/services/developerGiftService";
 
 export const dynamic = 'force-dynamic'
 
@@ -14,8 +15,8 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 403 });
         }
 
-        const collection = await getCollection('developerGifts'); // Corrected collection name
-        const gifts = await collection.find({ status: 'completed' }).sort({ timestamp: -1 }).toArray();
+        // Fetch all developer gifts without filtering by status here
+        const gifts = await DeveloperGiftService.getAllDeveloperGifts();
 
         return NextResponse.json({ success: true, gifts });
 

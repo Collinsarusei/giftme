@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Gift, Code, Trash2, Loader2, PlusCircle, LogOut, Home, Wallet, Download, DollarSign } from 'lucide-react';
 import Link from 'next/link';
+import { Badge } from '@/components/ui/badge';
 
 // ... (interfaces remain the same)
 interface Project {
@@ -34,7 +35,7 @@ export default function AdminDashboardPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [gifts, setGifts] = useState<AdminGift[]>([]);
+  const [developerGifts, setDeveloperGifts] = useState<AdminGift[]>([]); // Renamed from gifts to developerGifts for clarity
   const [platformFees, setPlatformFees] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -65,7 +66,7 @@ export default function AdminDashboardPage() {
           if (projectsData.success) setProjects(projectsData.projects);
 
           const giftsData = await giftsRes.json();
-          if (giftsData.success) setGifts(giftsData.gifts);
+          if (giftsData.success) setDeveloperGifts(giftsData.gifts);
 
           const feesData = await feesRes.json();
           if (feesData.success) setPlatformFees(feesData.totalPlatformFee);
@@ -84,8 +85,8 @@ export default function AdminDashboardPage() {
     fetchAdminData();
   }, [router]);
   
-  // ... (rest of the component logic remains the same)
-  const availableBalance = gifts.filter(g => g.status === 'completed').reduce((sum, g) => sum + g.amount, 0);
+  // Calculate availableBalance from developerGifts with status 'completed'
+  const availableBalance = developerGifts.filter(g => g.status === 'completed').reduce((sum, g) => sum + g.amount, 0);
   const finalPayout = availableBalance - PAYSTACK_TRANSFER_FEE_KES;
 
 
@@ -137,7 +138,7 @@ export default function AdminDashboardPage() {
       setIsWithdrawing(true);
       setStatusMessage('Processing withdrawal...');
 
-      const giftIdsToWithdraw = gifts.filter(g => g.status === 'completed').map(g => g._id);
+      const giftIdsToWithdraw = developerGifts.filter(g => g.status === 'completed').map(g => g._id);
 
       try {
         const res = await fetch('/api/admin/withdraw', {
@@ -157,7 +158,7 @@ export default function AdminDashboardPage() {
         if(data.success) {
             setStatusMessage('✅ Withdrawal successful!');
             // Update UI
-            setGifts(gifts.map(g => giftIdsToWithdraw.includes(g._id) ? {...g, status: 'withdrawn'} : g));
+            setDeveloperGifts(developerGifts.map(g => giftIdsToWithdraw.includes(g._id) ? {...g, status: 'withdrawn'} : g));
         } else {
             throw new Error(data.message);
         }
@@ -249,12 +250,12 @@ export default function AdminDashboardPage() {
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center"><Gift className="mr-2"/>Gifts for You</CardTitle>
-                    <CardDescription>{gifts.length} gifts received.</CardDescription>
+                    <CardDescription>{developerGifts.length} gifts received.</CardDescription>
                 </CardHeader>
                 <CardContent className='max-h-96 overflow-y-auto'>
-                {gifts.length > 0 ? gifts.map(g => (
+                {developerGifts.length > 0 ? developerGifts.map(g => (
                     <div key={g._id} className="p-2 border-b">
-                    <p><b>{g.from}</b> sent <b>KES {g.amount}</b> ({g.status})</p>
+                    <p><b>{g.from}</b> sent <b>KES {g.amount}</b> (<Badge variant="outline">{g.status.replace(/_/g, ' ')}</Badge>)</p>
                     <p className='text-sm text-gray-600'>"{g.message}"</p>
                     </div>
                 )) : (

@@ -162,7 +162,7 @@ export default function EventPage() {
           setPaymentStatus("🎉 Thank you! Your gift has been recorded.");
           setShowSuccess(true);
           // Refetch to show updated data immediately
-          fetchEventData(params?.id);
+          fetchEventData(params?.id); // Re-fetch to update raised amount and gift count
       } else {
           setPaymentStatus("⚠️ Payment failed or was cancelled.");
       }
@@ -511,9 +511,7 @@ export default function EventPage() {
           {(giftPackages[event.currency as keyof typeof giftPackages] || []).map((pkg) => (
             <Card
               key={pkg.amount}
-              className={`cursor-pointer transition-all duration-200 hover:shadow-lg ring-2 ring-purple-500 bg-purple-50 ${
-                selectedPackage?.amount === pkg.amount ? "ring-offset-2" : ""
-              }`}
+              className={`cursor-pointer transition-all duration-200 hover:shadow-lg ${selectedPackage?.amount === pkg.amount ? 'ring-2 ring-purple-500 ring-offset-2 bg-purple-100' : 'bg-purple-50'}`}
               onClick={() => setSelectedPackage(pkg)}
             >
               <CardContent className="p-3 sm:p-4 text-center">

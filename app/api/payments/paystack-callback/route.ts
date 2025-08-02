@@ -4,11 +4,10 @@ import { EventService } from "@/lib/services/eventService";
 import { DeveloperGiftService } from "@/lib/services/developerGiftService";
 import type { Gift } from "@/lib/models/Event";
 import type { DeveloperGift } from "@/lib/models/DeveloperGift";
-import clientPromise from "@/lib/mongodb"; // Import clientPromise
+import clientPromise from "@/lib/mongodb";
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
 
-// Helper function to dynamically determine the base URL
 const getBaseUrl = (req: NextRequest): string => {
     const forwardedHost = req.headers.get('x-forwarded-host');
     if (forwardedHost) {
@@ -25,7 +24,7 @@ const getBaseUrl = (req: NextRequest): string => {
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const reference = searchParams.get("reference"); // This is our transactionId
+  const reference = searchParams.get("reference");
   const eventIdQuery = searchParams.get("eventId");
 
   const baseUrl = getBaseUrl(request);
@@ -36,7 +35,7 @@ export async function GET(request: NextRequest) {
   } else if (eventIdQuery) {
     redirectUrl = new URL(`/event/${eventIdQuery}`, baseUrl);
   }
-  redirectUrl.searchParams.set("payment", "failed"); // Default to failed
+  redirectUrl.searchParams.set("payment", "failed");
 
   if (!reference || !eventIdQuery) {
     return NextResponse.redirect(redirectUrl);
@@ -56,9 +55,9 @@ export async function GET(request: NextRequest) {
       const eventId = metadata.eventId || eventIdQuery;
       const grossAmount = amount / 100;
 
-      const client = await clientPromise; // Get MongoDB client
+      const client = await clientPromise;
       const db = client.db();
-      let wasGiftAdded = false; // Flag to track if gift was added/already exists
+      let wasGiftAdded = false;
 
       if (eventId === 'dev-support') {
         const devGiftsCollection = db.collection<DeveloperGift>("developerGifts");
@@ -66,7 +65,7 @@ export async function GET(request: NextRequest) {
 
         if (existingDeveloperGift) {
           console.log(`Developer gift with transaction ID ${reference} already recorded. Skipping.`);
-          wasGiftAdded = true; // Treat as success for redirection
+          wasGiftAdded = true;
         } else {
           const newDeveloperGift: DeveloperGift = {
             id: `dev_gift_${reference}`,
@@ -84,15 +83,15 @@ export async function GET(request: NextRequest) {
         }
 
       } else {
-        const eventsCollection = db.collection<Gift>("events"); // Use Gift type for events collection query
+        const eventsCollection = db.collection("events"); 
         const existingEventGift = await eventsCollection.findOne({
             "gifts.transactionId": reference, 
-            id: eventId // Ensure it's for the specific event
+            id: eventId 
         });
 
         if (existingEventGift) {
           console.log(`Event gift with transaction ID ${reference} for event ${eventId} already recorded. Skipping.`);
-          wasGiftAdded = true; // Treat as success for redirection
+          wasGiftAdded = true;
         } else {
           const newGift: Gift = {
             id: `gift_${reference}`,
@@ -107,9 +106,8 @@ export async function GET(request: NextRequest) {
             status: "pending_withdrawal", 
             transactionId: reference,
           };
-          // Add the gift to the event, and increment the "raised" counter by the full amount.
-          // The amount is already included in newGift.amount, so no separate increment is needed here.
-          wasGiftAdded = await EventService.addGiftToEvent(eventId, newGift, 0); 
+          // Pass grossAmount to increment the raised field on the event document
+          wasGiftAdded = await EventService.addGiftToEvent(eventId, newGift, grossAmount); 
         }
       }
       redirectUrl.searchParams.set("payment", wasGiftAdded ? "success" : "failed");

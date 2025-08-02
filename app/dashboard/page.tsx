@@ -60,7 +60,7 @@ export default function DashboardPage() {
           const res = await fetch(`/api/events?createdBy=${authData.user.username}`);
           const data = await res.json();
           if (data.success) {
-            const myEvents = data.events.filter((event: any) => event.status !== 'cancelled');
+            const myEvents = data.events.filter((event: any) => event.status !== 'cancelled' && event.status !== 'deleted'); // Filter out 'deleted' events
             setUserEvents(myEvents);
 
             let initialSelectedEvent = null;

@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
           transactionId: reference,
         };
         // Add the gift to the event, and increment the "raised" counter by the full amount.
-        const wasGiftAdded = await EventService.addGiftToEvent(eventId, newGift, grossAmount);
+        const wasGiftAdded = await EventService.addGiftToEvent(eventId, newGift, 0); // Changed grossAmount to 0
         redirectUrl.searchParams.set("payment", wasGiftAdded ? "success" : "failed");
       }
       return NextResponse.redirect(redirectUrl);

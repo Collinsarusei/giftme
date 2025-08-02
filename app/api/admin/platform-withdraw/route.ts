@@ -1,23 +1,10 @@
 // app/api/admin/platform-withdraw/route.ts
 import { type NextRequest, NextResponse } from "next/server"
-import { PlatformFeeService } from "@/lib/services/platformFeeService"
 import { getCollection } from "@/lib/mongodb"
+import { formatMpesaNumber } from "@/lib/utils"; // Import the robust formatter
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL
-
-// Use the same robust M-Pesa number formatter
-const formatMpesaNumber = (number: string): string => {
-    let cleanNumber = number.replace(/\D/g, '');
-    if (cleanNumber.startsWith('0')) {
-        return `254${cleanNumber.substring(1)}`;
-    } else if (cleanNumber.length === 9 && (cleanNumber.startsWith('7') || cleanNumber.startsWith('1'))) {
-        return `254${cleanNumber}`;
-    } else if (cleanNumber.startsWith('254') && cleanNumber.length === 12) {
-        return cleanNumber;
-    }
-    return cleanNumber;
-};
 
 export async function POST(request: NextRequest) {
     try {
@@ -34,8 +21,7 @@ export async function POST(request: NextRequest) {
 
         const formattedMpesa = formatMpesaNumber(mpesaNumber);
 
-        // **CRITICAL VALIDATION** before sending to Paystack
-        if (!formattedMpesa.startsWith('254') || formattedMpesa.length !== 12) {
+        if (!formattedMpesa) {
             return NextResponse.json({ success: false, message: "Invalid M-Pesa number format. Please use a valid Kenyan number (e.g., 07...)." }, { status: 400 });
         }
 
@@ -47,9 +33,8 @@ export async function POST(request: NextRequest) {
         }
         
         const totalFeeAmount = feesToWithdraw.reduce((sum, fee) => sum + fee.amount, 0);
-
-        // Paystack fee should be subtracted from the total to be withdrawn
         const netAmount = totalFeeAmount - 20; // 20 KES Paystack fee
+
         if (netAmount <= 0) {
             return NextResponse.json({ success: false, message: "Net payout is too low after Paystack fee." }, { status: 400 });
         }
@@ -71,7 +56,7 @@ export async function POST(request: NextRequest) {
         });
         const recipientData = await recipientRes.json();
         if (!recipientData.status || !recipientData.data?.recipient_code) {
-            throw new Error(`Failed to create Paystack recipient: ${recipientData.message}`);
+            return NextResponse.json({ success: false, message: `Failed to create Paystack recipient: ${recipientData.message}` }, { status: 400 });
         }
 
         // 2. Initiate Paystack Transfer
@@ -90,7 +75,7 @@ export async function POST(request: NextRequest) {
         });
         const transferData = await transferRes.json();
         if (!transferData.status) {
-            throw new Error(`Paystack transfer failed: ${transferData.message}`);
+            return NextResponse.json({ success: false, message: `Paystack transfer failed: ${transferData.message}` }, { status: 400 });
         }
 
         // 3. Mark fees as withdrawn

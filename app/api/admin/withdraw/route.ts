@@ -2,30 +2,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getCollection } from "@/lib/mongodb"
 import { ObjectId } from "mongodb"
+import { formatMpesaNumber } from "@/lib/utils"; // Import the robust formatter
 
 export const dynamic = 'force-dynamic'
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY
 const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL
-
-// A more robust helper to format the M-Pesa number to the required 254XXXXXXXXX format
-const formatMpesaNumber = (number: string): string => {
-    let cleanNumber = number.replace(/\D/g, ''); // Remove all non-digit characters
-
-    if (cleanNumber.startsWith('0')) {
-        // e.g., 0712345678 -> 254712345678
-        return `254${cleanNumber.substring(1)}`;
-    } else if (cleanNumber.length === 9 && (cleanNumber.startsWith('7') || cleanNumber.startsWith('1'))) {
-        // e.g., 712345678 -> 254712345678
-        return `254${cleanNumber}`;
-    } else if (cleanNumber.startsWith('254') && cleanNumber.length === 12) {
-        // Already in the correct format
-        return cleanNumber;
-    }
-    
-    // Return the cleaned number for the validation check to catch it
-    return cleanNumber;
-};
 
 export async function POST(request: NextRequest) {
     try {
@@ -42,8 +24,7 @@ export async function POST(request: NextRequest) {
         
         const formattedMpesa = formatMpesaNumber(mpesaNumber);
 
-        // **CRITICAL VALIDATION** before sending to Paystack
-        if (!formattedMpesa.startsWith('254') || formattedMpesa.length !== 12) {
+        if (!formattedMpesa) {
             return NextResponse.json({ success: false, message: "Invalid M-Pesa number format. Please use a valid Kenyan number (e.g., 07...)." }, { status: 400 });
         }
 
@@ -55,7 +36,7 @@ export async function POST(request: NextRequest) {
         }).filter(id => id !== null);
 
         if (objectIdGiftIds.length !== giftIds.length) {
-             return NextResponse.json({ success: false, message: "Some gift IDs were invalid. Please check data consistency." }, { status: 400 });
+             return NextResponse.json({ success: false, message: "Some gift IDs were invalid." }, { status: 400 });
         }
 
         // 1. Create Paystack Recipient
@@ -75,7 +56,8 @@ export async function POST(request: NextRequest) {
         });
         const recipientData = await recipientRes.json();
         if (!recipientData.status || !recipientData.data?.recipient_code) {
-            throw new Error(`Failed to create Paystack recipient: ${recipientData.message || "Unknown error"}`);
+             // Return Paystack's error message directly
+             return NextResponse.json({ success: false, message: `Failed to create Paystack recipient: ${recipientData.message}` }, { status: 400 });
         }
 
         // 2. Initiate Paystack Transfer
@@ -94,7 +76,8 @@ export async function POST(request: NextRequest) {
         });
         const transferData = await transferRes.json();
         if (!transferData.status) {
-            throw new Error(`Paystack transfer failed: ${transferData.message || "Unknown error"}`);
+             // Return Paystack's error message directly
+             return NextResponse.json({ success: false, message: `Paystack transfer failed: ${transferData.message}` }, { status: 400 });
         }
 
         // 3. Update gift statuses in the database

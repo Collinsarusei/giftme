@@ -1,7 +1,9 @@
-import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server"
 import { DeveloperGiftService } from "@/lib/services/developerGiftService";
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
+
+export const dynamic = 'force-dynamic'; // Ensure dynamic fetching
 
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key";
 
@@ -34,11 +36,15 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const gifts = await DeveloperGiftService.getAllDeveloperGifts();
+    // Fetch gifts with status 'completed' or 'withdrawn'
+    const gifts = await DeveloperGiftService.getAllDeveloperGifts(); // This service method already fetches all, filtering will be done on frontend if needed or we update service
+    
+    // Filtering for completed or withdrawn status as per admin dashboard requirement
+    const filteredGifts = gifts.filter(gift => gift.status === 'completed' || gift.status === 'withdrawn');
 
     return NextResponse.json({
       success: true,
-      gifts: gifts,
+      gifts: filteredGifts,
     });
   } catch (error) {
     console.error("Error fetching developer gifts:", error);

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 403 });
         }
 
-        const collection = await getCollection('developer_gifts');
+        const collection = await getCollection('developerGifts'); // Corrected collection name
         const gifts = await collection.find({ status: 'completed' }).sort({ timestamp: -1 }).toArray();
 
         return NextResponse.json({ success: true, gifts });

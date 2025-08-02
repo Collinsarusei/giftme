@@ -1,6 +1,6 @@
 // app/api/admin/platform-fees/route.ts
 import { type NextRequest, NextResponse } from "next/server";
-import { getCollection } from "@/lib/mongodb";
+import { PlatformFeeService } from "@/lib/services/platformFeeService";
 
 export const dynamic = 'force-dynamic'
 
@@ -13,24 +13,13 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 403 });
         }
 
-        const eventsCollection = await getCollection('events');
+        // Use the PlatformFeeService to get all fees
+        const allFees = await PlatformFeeService.getAllFees();
         
-        // Use aggregation pipeline to calculate the sum of developerFee for withdrawn gifts
-        const result = await eventsCollection.aggregate([
-            // 1. Unwind the gifts array to process each gift individually
-            { $unwind: "$gifts" },
-            // 2. Filter for gifts that have been successfully withdrawn
-            { $match: { "gifts.status": "withdrawn" } },
-            // 3. Group and sum the developerFee for all matched gifts
-            { $group: {
-                _id: null,
-                totalPlatformFee: { $sum: "$gifts.developerFee" }
-            }}
-        ]).toArray();
+        // Sum the amounts to get the total platform fee
+        const totalPlatformFee = allFees.reduce((sum, fee) => sum + fee.amount, 0);
 
-        const totalFees = result.length > 0 ? result[0].totalPlatformFee : 0;
-
-        return NextResponse.json({ success: true, totalPlatformFee: totalFees });
+        return NextResponse.json({ success: true, totalPlatformFee: totalPlatformFee });
 
     } catch (error) {
         console.error("Failed to fetch platform fees:", error);

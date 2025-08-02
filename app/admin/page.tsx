@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge"; // Import Badge
+import { Badge } from "@/components/ui/badge";
 import { Gift, Code, Trash2, Loader2, PlusCircle, LogOut, Home, Wallet, Download, DollarSign } from 'lucide-react';
 import Link from 'next/link';
 
@@ -39,11 +39,11 @@ export default function AdminDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
-  const [isWithdrawingFees, setIsWithdrawingFees] = useState(false); // State for fee withdrawal
+  const [isWithdrawingFees, setIsWithdrawingFees] = useState(false);
   const [newProject, setNewProject] = useState({ name: '', url: '' });
   const [mpesaNumber, setMpesaNumber] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
-  const [feeStatusMessage, setFeeStatusMessage] = useState(''); // Status for fee withdrawal
+  const [feeStatusMessage, setFeeStatusMessage] = useState('');
 
   useEffect(() => {
     async function fetchAdminData() {
@@ -89,31 +89,95 @@ export default function AdminDashboardPage() {
     fetchAdminData();
   }, [router]);
   
-  // Safely calculate availableBalance
   const availableBalance = developerGifts
     .filter(g => g?.status === 'completed' && typeof g?.amount === 'number')
     .reduce((sum, g) => sum + g.amount, 0);
   const finalPayout = availableBalance - PAYSTACK_TRANSFER_FEE_KES;
-
   const finalFeePayout = platformFees - PAYSTACK_TRANSFER_FEE_KES;
-
 
   const handleProjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    // ... submit logic ...
-    setIsSubmitting(false);
+    try {
+        const res = await fetch('/api/projects', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'x-user': JSON.stringify({ username: 'admin' })
+            },
+            body: JSON.stringify(newProject),
+        });
+        const data = await res.json();
+        if(data.success) {
+            setProjects([data.project, ...projects]);
+            setNewProject({ name: '', url: '' });
+        } else {
+            alert(data.message);
+        }
+    } catch (error) {
+        alert('Failed to add project.');
+    } finally {
+        setIsSubmitting(false);
+    }
   };
 
   const handleProjectDelete = async (id: string) => {
-    // ... delete logic ...
+    try {
+        const res = await fetch(`/api/projects/${id}`, {
+            method: 'DELETE',
+            headers: { 'x-user': JSON.stringify({ username: 'admin' }) },
+        });
+        const data = await res.json();
+        if(data.success) {
+            setProjects(projects.filter(p => p._id !== id));
+        } else {
+            alert(data.message);
+        }
+    } catch (error) {
+        alert('Failed to delete project.');
+    }
   }
 
   const handleWithdrawal = async () => {
-      if(finalPayout <= 0 || !mpesaNumber) return;
+      if(finalPayout <= 0 || !mpesaNumber) {
+        setStatusMessage("M-Pesa number is required and payout must be positive.");
+        return;
+      }
       setIsWithdrawing(true);
-      // ... withdrawal logic ...
-      setIsWithdrawing(false);
+      setStatusMessage('Processing gift withdrawal...');
+
+      const giftIdsToWithdraw = developerGifts
+        .filter(g => g?.status === 'completed')
+        .map(g => g._id);
+
+      try {
+        const res = await fetch('/api/admin/withdraw', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-user-email': currentUser.email,
+            },
+            body: JSON.stringify({
+                amount: finalPayout,
+                mpesaNumber,
+                reason: 'Developer support withdrawal',
+                giftIds: giftIdsToWithdraw,
+            }),
+        });
+        const data = await res.json();
+        if(data.success) {
+            setStatusMessage('✅ Gift withdrawal successful!');
+            setDeveloperGifts(developerGifts.map(g => giftIdsToWithdraw.includes(g._id) ? {...g, status: 'withdrawn'} : g));
+        } else {
+            throw new Error(data.message);
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'An error occurred.';
+        setStatusMessage(`❌ ${msg}`);
+      } finally {
+          setIsWithdrawing(false);
+          setTimeout(() => setStatusMessage(''), 7000);
+      }
   }
   
   const handleFeeWithdrawal = async () => {
@@ -140,7 +204,6 @@ export default function AdminDashboardPage() {
         const data = await res.json();
         if (data.success) {
             setFeeStatusMessage('✅ Platform fees withdrawn successfully!');
-            // Refresh platform fees after withdrawal
             const feesRes = await fetch('/api/admin/platform-fees', { headers: { 'x-user-email': currentUser.email }});
             const feesData = await feesRes.json();
             if (feesData.success) setPlatformFees(feesData.totalPlatformFee);
@@ -157,7 +220,19 @@ export default function AdminDashboardPage() {
 };
 
   const handleLogout = async () => {
-    // ... logout logic ...
+    try {
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setCurrentUser(null); 
+        router.push('/');
+      } else {
+        alert(data.message || "Logout failed.");
+      }
+    } catch (error) {
+      console.error("Logout error:", error);
+      alert("An error occurred during logout.");
+    }
   };
 
   if (isLoading || !currentUser) {
@@ -221,6 +296,13 @@ export default function AdminDashboardPage() {
 
         <div className="space-y-6 md:space-y-8">
             <Card>
+                <CardHeader><CardTitle className="text-lg sm:text-xl">Withdrawal Details</CardTitle></CardHeader>
+                <CardContent>
+                    <Label htmlFor="mpesaNumber">Your M-Pesa Number (For All Withdrawals)</Label>
+                    <Input id="mpesaNumber" value={mpesaNumber} onChange={e => setMpesaNumber(e.target.value)} placeholder="07... or 01..." required/>
+                </CardContent>
+            </Card>
+            <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center text-lg sm:text-xl"><Wallet className="mr-2"/>Withdraw Platform Fees</CardTitle>
                 </CardHeader>
@@ -274,10 +356,6 @@ export default function AdminDashboardPage() {
                             <div className="flex justify-between"><span>Paystack Fee:</span><span>- KES {PAYSTACK_TRANSFER_FEE_KES.toFixed(2)}</span></div>
                             <hr/>
                             <div className="flex justify-between font-bold text-base sm:text-lg"><span>Final Payout:</span><span>KES {finalPayout > 0 ? finalPayout.toFixed(2) : '0.00'}</span></div>
-                        </div>
-                         <div>
-                            <Label htmlFor="mpesaNumber">Your M-Pesa Number (For All Withdrawals)</Label>
-                            <Input id="mpesaNumber" value={mpesaNumber} onChange={e => setMpesaNumber(e.target.value)} placeholder="07... or 01..." required/>
                         </div>
                         <Button onClick={handleWithdrawal} disabled={isWithdrawing || finalPayout <= 0} className="w-full">
                             {isWithdrawing ? 'Withdrawing...' : <><Download className="mr-2 h-4 w-4"/> Withdraw Gifts</>}

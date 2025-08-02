@@ -26,7 +26,7 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
-    --radius: 0.75rem; /* Slightly larger radius for a modern look */
+    --radius: 0.5rem;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
@@ -67,39 +67,53 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-sans;
-    font-feature-settings: "calt" 1; /* Enable contextual alternates for a better look */
-  }
-
-  /* Responsive Typography */
-  h1 {
-    @apply text-4xl font-bold tracking-tight lg:text-5xl;
-  }
-  h2 {
-    @apply text-3xl font-bold tracking-tight;
-  }
-  h3 {
-    @apply text-2xl font-bold tracking-tight;
-  }
-  p {
-    @apply text-base leading-7;
+    @apply bg-background text-foreground font-sans; /* Apply font-sans here */
   }
 }
 
-@layer components {
-  /* Modern Button Styles */
-  .btn-modern {
-    @apply shadow-lg transition-transform duration-300 ease-in-out hover:scale-105 active:scale-95;
-  }
+/* 
+  Removed extensive custom @media queries. 
+  Instead, rely on Tailwind's built-in responsive utilities directly in components. 
+  Kept only critical non-Tailwind specific overrides or accessibility improvements.
+*/
 
-  .btn-gradient {
-    @apply bg-gradient-to-r from-purple-600 to-pink-500 text-white;
-  }
+/* Improve touch targets for all buttons */
+button {
+  min-height: 44px;
 }
 
-/* iOS input zoom fix */
+/* Improve form inputs on mobile to prevent zoom on iOS */
 input,
 textarea,
 select {
   font-size: 16px;
+}
+
+/* Ensure dialogs are scrollable */
+[role="dialog"] {
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+/* Fix dialog content accessibility */
+[role="dialog"] {
+  outline: none;
+}
+
+/* Suppress Monaco Editor warnings - assuming this is still needed */
+.monaco-editor {
+  --monaco-monospace-font: "SF Mono", Monaco, Inconsolata, "Roboto Mono", Consolas, "Courier New", monospace;
+}
+
+/* Hide preload warnings */
+link[rel="preload"] {
+  font-display: optional;
+}
+
+/* Prevent layout shift */
+.loading-spinner {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

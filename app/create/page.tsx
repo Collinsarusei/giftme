@@ -26,6 +26,7 @@ export default function CreateEventPage() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [formData, setFormData] = useState({
     eventType: "",
+    otherEventType: "", // New state for 'other' event type
     userName: "",
     eventDate: "",
     mpesaNumber: "",
@@ -34,6 +35,7 @@ export default function CreateEventPage() {
     images: [] as File[],
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchCurrentUser() {
@@ -56,6 +58,7 @@ export default function CreateEventPage() {
   }, [router]);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormError(null);
     const files = Array.from(e.target.files || [])
     const remainingSlots = 3 - formData.images.length
     const filesToAdd = files.slice(0, remainingSlots)
@@ -82,21 +85,27 @@ export default function CreateEventPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
+    setFormError(null);
 
     try {
       // Convert images to base64 for storage
       const imageUrls = await Promise.all(
         formData.images.map(async (file) => {
-          return new Promise<string>((resolve) => {
+          return new Promise<string>((resolve, reject) => {
             const reader = new FileReader()
             reader.onload = (e) => resolve(e.target?.result as string)
+            reader.onerror = (error) => reject("Failed to read file: " + error);
             reader.readAsDataURL(file)
           })
         }),
-      )
+      );
+      console.log("Image URLs generated. Count:", imageUrls.length);
+      if (imageUrls.length > 0) {
+        console.log("Size of first image (base64):"), imageUrls[0]?.length; 
+      }
 
       const eventData = {
-        eventType: formData.eventType,
+        eventType: formData.eventType === "other" ? formData.otherEventType : formData.eventType,
         userName: formData.userName,
         eventDate: formData.eventDate,
         mpesaNumber: formData.mpesaNumber,
@@ -105,6 +114,7 @@ export default function CreateEventPage() {
         images: imageUrls,
         createdBy: currentUser.username,
       }
+      console.log("Event data payload size (approx):"), JSON.stringify(eventData).length / 1024 + " KB";
 
       const response = await fetch("/api/events/create", {
         method: "POST",
@@ -112,17 +122,23 @@ export default function CreateEventPage() {
         body: JSON.stringify(eventData),
       })
 
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("API response error:", errorData);
+        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      }
+
       const data = await response.json()
 
       if (data.success) {
         // Redirect to the created event page
         router.push(`/event/${data.event.id}?new=true`)
       } else {
-        alert(data.message || "Failed to create event")
+        setFormError(data.message || "Failed to create event.");
       }
     } catch (error) {
-      console.error("Error creating event:", error)
-      alert("Failed to create event. Please try again.")
+      console.error("Error creating event:", error);
+      setFormError(`Failed to create event: ${error instanceof Error ? error.message : String(error)}. Please try again.`);
     } finally {
       setIsSubmitting(false)
     }
@@ -171,7 +187,13 @@ export default function CreateEventPage() {
                   <Label htmlFor="eventType">Event Type *</Label>
                   <Select
                     value={formData.eventType}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, eventType: value }))}
+                    onValueChange={(value) => {
+                      setFormData((prev) => ({ 
+                        ...prev, 
+                        eventType: value,
+                        ...(value !== "other" && { otherEventType: "" }) // Clear if not 'other'
+                      }));
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select your event type" />
@@ -188,6 +210,20 @@ export default function CreateEventPage() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* New: Other Event Type Input */}
+                {formData.eventType === "other" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="otherEventType">Specify Event Type *</Label>
+                    <Input
+                      id="otherEventType"
+                      placeholder="e.g., Housewarming, Fundraiser, Pet's Birthday"
+                      value={formData.otherEventType}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, otherEventType: e.target.value }))}
+                      required
+                    />
+                  </div>
+                )}
 
                 {/* User Name */}
                 <div className="space-y-2">
@@ -300,6 +336,12 @@ export default function CreateEventPage() {
                   )}
                   <p className="text-xs text-gray-500">{formData.images.length}/3 images selected</p>
                 </div>
+                
+                {formError && (
+                  <div className="text-red-500 text-sm text-center p-2 border border-red-300 bg-red-50 rounded">
+                    {formError}
+                  </div>
+                )}
 
                 {/* Submit Button */}
                 <Button
@@ -308,6 +350,7 @@ export default function CreateEventPage() {
                   disabled={
                     isSubmitting ||
                     !formData.eventType ||
+                    (formData.eventType === "other" && !formData.otherEventType) || // Disable if 'other' is selected but not specified
                     !formData.userName ||
                     !formData.eventDate ||
                     !formData.mpesaNumber

@@ -2,11 +2,13 @@
 import clientPromise from "@/lib/mongodb";
 
 export interface PlatformFee {
+  _id: boolean;
   eventId: string;
   amount: number;
   currency: string;
   timestamp: Date;
   relatedTransactionId: string;
+  withdrawn?: boolean; // Add this field
 }
 
 export class PlatformFeeService {
@@ -21,7 +23,10 @@ export class PlatformFeeService {
       const db = client.db();
       const collection = db.collection("platform_fees");
 
-      const result = await collection.insertOne(fee);
+      // Ensure 'withdrawn' is explicitly set to false when recording a new fee
+      const feeToRecord = { ...fee, withdrawn: false };
+
+      const result = await collection.insertOne(feeToRecord);
       
       console.log(`Platform fee of ${fee.amount} ${fee.currency} recorded for event ${fee.eventId}.`);
       return result.acknowledged;
@@ -42,7 +47,8 @@ export class PlatformFeeService {
       const db = client.db();
       const collection = db.collection("platform_fees");
 
-      const fees = await collection.find({}).sort({ timestamp: -1 }).toArray();
+      // Filter to only show fees that have not been withdrawn
+      const fees = await collection.find({ withdrawn: { $ne: true } }).sort({ timestamp: -1 }).toArray();
       
       // The MongoDB driver returns _id, which we don't need to send to the client.
       // The data is safe, but this is good practice.

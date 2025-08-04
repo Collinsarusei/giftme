@@ -91,6 +91,7 @@ export default function EventPage() {
   
   const [event, setEvent] = useState<any>(null)
   const [selectedPackage, setSelectedPackage] = useState<any>(null)
+  const [customAmount, setCustomAmount] = useState<string>("");
   const [giftMessage, setGiftMessage] = useState("")
   const [giftFrom, setGiftFrom] = useState("")
   const [giftEmail, setGiftEmail] = useState("")
@@ -181,7 +182,23 @@ export default function EventPage() {
   }
 
   const handleGiftSubmit = async () => {
-    if (!selectedPackage || !giftEmail) {
+    let amountToSend: number;
+    if (selectedPackage?.type === 'custom') {
+      amountToSend = parseFloat(customAmount);
+      if (isNaN(amountToSend) || amountToSend <= 0) {
+        setPaymentStatus("❌ Please enter a valid custom amount.")
+        setTimeout(() => setPaymentStatus(""), 3000)
+        return;
+      }
+    } else if (selectedPackage) {
+      amountToSend = selectedPackage.amount;
+    } else {
+      setPaymentStatus("❌ Please select a gift package or enter a custom amount.")
+      setTimeout(() => setPaymentStatus(""), 3000)
+      return;
+    }
+
+    if (!giftEmail) {
       setPaymentStatus("❌ Please provide your email.")
       setTimeout(() => setPaymentStatus(""), 3000)
       return
@@ -195,7 +212,7 @@ export default function EventPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: selectedPackage.amount,
+          amount: amountToSend,
           email: giftEmail,
           eventName: event.name,
           currency: event.currency,
@@ -227,6 +244,7 @@ export default function EventPage() {
 
   const resetForm = () => {
     setSelectedPackage(null)
+    setCustomAmount("")
     setGiftMessage("")
     setGiftFrom("")
     setGiftEmail("")
@@ -283,7 +301,7 @@ export default function EventPage() {
   }
   const getEventStatusMessage = () => {
     if (eventStatus === "today") return `🎉 Today is the day!`
-    if (eventStatus === "upcoming") return `Just ${daysUntilEvent} day${daysUntilEvent !== 1 ? "s" : ""} to go!`
+    if (eventStatus === "upcoming") return `Just ${daysUntilEvent} day${daysUntilEvent !== 1 ? "s" : "" } to go!`
     return "This event has passed."
   }
   
@@ -511,8 +529,11 @@ export default function EventPage() {
           {(giftPackages[event.currency as keyof typeof giftPackages] || []).map((pkg) => (
             <Card
               key={pkg.amount}
-              className={`cursor-pointer transition-all duration-200 hover:shadow-lg ${selectedPackage?.amount === pkg.amount ? 'ring-2 ring-purple-500 ring-offset-2 bg-purple-100' : 'bg-purple-50'}`}
-              onClick={() => setSelectedPackage(pkg)}
+              className={`cursor-pointer transition-all duration-200 hover:shadow-lg ${selectedPackage?.amount === pkg.amount && selectedPackage?.type !== 'custom' ? 'ring-2 ring-purple-500 ring-offset-2 bg-purple-100' : 'bg-purple-50'}`}
+              onClick={() => {
+                setSelectedPackage(pkg);
+                setCustomAmount("");
+              }}
             >
               <CardContent className="p-3 sm:p-4 text-center">
                 <div className="text-2xl sm:text-3xl mb-2">{pkg.emoji}</div>
@@ -523,6 +544,27 @@ export default function EventPage() {
               </CardContent>
             </Card>
           ))}
+          {/* Custom Amount Input */}
+          <Card
+            className={`cursor-pointer transition-all duration-200 hover:shadow-lg ${selectedPackage?.type === 'custom' ? 'ring-2 ring-purple-500 ring-offset-2 bg-purple-100' : 'bg-purple-50'}`}
+            onClick={() => setSelectedPackage({ type: 'custom' })}
+          >
+            <CardContent className="p-3 sm:p-4 text-center flex flex-col justify-center h-full">
+              <Label htmlFor="custom-amount" className="text-sm sm:text-base mb-2">Other Amount</Label>
+              <Input
+                id="custom-amount"
+                type="number"
+                placeholder="e.g., 750"
+                value={customAmount}
+                onChange={(e) => {
+                  setCustomAmount(e.target.value);
+                  setSelectedPackage({ type: 'custom' });
+                }}
+                className="text-center"
+              />
+              <p className="text-xs text-gray-500 mt-1">Enter any amount</p>
+            </CardContent>
+          </Card>
         </div>
         <div className="text-center">
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -530,10 +572,11 @@ export default function EventPage() {
               <Button
                 size="lg"
                 className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 px-8"
-                disabled={!selectedPackage}
+                disabled={!selectedPackage && !customAmount}
               >
                 <Gift className="mr-2 h-5 w-5" />
-                Send Gift {selectedPackage && `(${event.currency} ${selectedPackage.amount})`}
+                Send Gift {selectedPackage && selectedPackage.type !== 'custom' && `(${event.currency} ${selectedPackage.amount})`}
+                {selectedPackage?.type === 'custom' && customAmount && `(${event.currency} ${customAmount})`}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">

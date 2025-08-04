@@ -44,6 +44,8 @@ export default function AdminDashboardPage() {
   const [mpesaNumber, setMpesaNumber] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [feeStatusMessage, setFeeStatusMessage] = useState('');
+  const [adminGiftWithdrawalAmount, setAdminGiftWithdrawalAmount] = useState<string>("");
+  const [platformFeeWithdrawalAmount, setPlatformFeeWithdrawalAmount] = useState<string>("");
 
   useEffect(() => {
     async function fetchAdminData() {
@@ -89,11 +91,12 @@ export default function AdminDashboardPage() {
     fetchAdminData();
   }, [router]);
   
-  const availableBalance = developerGifts
+  const availableDeveloperGiftBalance = developerGifts
     .filter(g => g?.status === 'completed' && typeof g?.amount === 'number')
     .reduce((sum, g) => sum + g.amount, 0);
-  const finalPayout = availableBalance - PAYSTACK_TRANSFER_FEE_KES;
-  const finalFeePayout = platformFees - PAYSTACK_TRANSFER_FEE_KES;
+
+  const adminGiftCalculatedPayout = Math.max(0, parseFloat(adminGiftWithdrawalAmount || '0') - PAYSTACK_TRANSFER_FEE_KES);
+  const platformFeeCalculatedPayout = Math.max(0, parseFloat(platformFeeWithdrawalAmount || '0') - PAYSTACK_TRANSFER_FEE_KES);
 
   const handleProjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,18 +142,21 @@ export default function AdminDashboardPage() {
   }
 
   const handleWithdrawal = async () => {
-      if(finalPayout <= 0 || !mpesaNumber) {
-        setStatusMessage("M-Pesa number is required and payout must be positive.");
+    const amountToWithdraw = parseFloat(adminGiftWithdrawalAmount);
+    if (isNaN(amountToWithdraw) || amountToWithdraw <= 0 || amountToWithdraw > availableDeveloperGiftBalance) {
+        setStatusMessage("Please enter a valid amount not exceeding your available balance.");
         return;
-      }
-      setIsWithdrawing(true);
-      setStatusMessage('Processing gift withdrawal...');
+    }
+    if(!mpesaNumber) {
+      setStatusMessage("M-Pesa number is required.");
+      return;
+    }
 
-      const giftIdsToWithdraw = developerGifts
-        .filter(g => g?.status === 'completed')
-        .map(g => g._id);
+    setIsWithdrawing(true);
+    setStatusMessage('Processing gift withdrawal...');
 
-      try {
+    // Send the requested amount. Backend will deduct transfer fee and mark gifts.
+    try {
         const res = await fetch('/api/admin/withdraw', {
             method: 'POST',
             headers: {
@@ -158,16 +164,23 @@ export default function AdminDashboardPage() {
                 'x-user-email': currentUser.email,
             },
             body: JSON.stringify({
-                amount: finalPayout,
+                amount: amountToWithdraw,
                 mpesaNumber,
                 reason: 'Developer support withdrawal',
-                giftIds: giftIdsToWithdraw,
+                // giftIds are now handled by backend based on amount, or all if amount covers all.
+                // For simplicity here, we assume backend selects gifts to mark.
             }),
         });
         const data = await res.json();
         if(data.success) {
             setStatusMessage('✅ Gift withdrawal successful!');
-            setDeveloperGifts(developerGifts.map(g => giftIdsToWithdraw.includes(g._id) ? {...g, status: 'withdrawn'} : g));
+            // Re-fetch gifts to update status and balance
+            const giftsRes = await fetch('/api/admin/gifts', { headers: { 'x-user-email': currentUser.email }});
+            const giftsData = await giftsRes.json();
+            if (giftsData.success && Array.isArray(giftsData.gifts)) {
+                setDeveloperGifts(giftsData.gifts.filter((g: any) => g && typeof g === 'object' && g._id && g.status));
+            }
+            setAdminGiftWithdrawalAmount(""); // Clear input
         } else {
             throw new Error(data.message);
         }
@@ -181,13 +194,20 @@ export default function AdminDashboardPage() {
   }
   
   const handleFeeWithdrawal = async () => {
-    if (finalFeePayout <= 0 || !mpesaNumber) {
-        setFeeStatusMessage("M-Pesa number is required and payout must be positive.");
+    const amountToWithdraw = parseFloat(platformFeeWithdrawalAmount);
+    if (isNaN(amountToWithdraw) || amountToWithdraw <= 0 || amountToWithdraw > platformFees) {
+        setFeeStatusMessage("Please enter a valid amount not exceeding available revenue.");
         return;
     }
+    if (!mpesaNumber) {
+        setFeeStatusMessage("M-Pesa number is required.");
+        return;
+    }
+
     setIsWithdrawingFees(true);
     setFeeStatusMessage('Processing fee withdrawal...');
 
+    // Send the requested amount. Backend will deduct transfer fee.
     try {
         const res = await fetch('/api/admin/platform-withdraw', {
             method: 'POST',
@@ -196,7 +216,7 @@ export default function AdminDashboardPage() {
                 'x-user-email': currentUser.email,
             },
             body: JSON.stringify({
-                amount: finalFeePayout,
+                amount: amountToWithdraw,
                 mpesaNumber,
                 reason: 'Platform fee withdrawal',
             }),
@@ -204,9 +224,11 @@ export default function AdminDashboardPage() {
         const data = await res.json();
         if (data.success) {
             setFeeStatusMessage('✅ Platform fees withdrawn successfully!');
+            // Re-fetch platform fees to update balance
             const feesRes = await fetch('/api/admin/platform-fees', { headers: { 'x-user-email': currentUser.email }});
             const feesData = await feesRes.json();
             if (feesData.success) setPlatformFees(feesData.totalPlatformFee);
+            setPlatformFeeWithdrawalAmount(""); // Clear input
         } else {
             throw new Error(data.message);
         }
@@ -312,12 +334,23 @@ export default function AdminDashboardPage() {
                             <p className="text-sm text-gray-500">Available Revenue</p>
                             <p className="text-xl sm:text-2xl font-bold">KES {platformFees.toLocaleString()}</p>
                         </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="platformFeeWithdrawalAmount">Amount to Withdraw</Label>
+                            <Input 
+                                id="platformFeeWithdrawalAmount" 
+                                type="number" 
+                                value={platformFeeWithdrawalAmount}
+                                onChange={e => setPlatformFeeWithdrawalAmount(e.target.value)}
+                                placeholder={`Max: ${platformFees.toLocaleString()}`}
+                                max={platformFees}
+                            />
+                        </div>
                         <div className="p-3 bg-gray-50 rounded-md text-sm space-y-1">
                             <div className="flex justify-between"><span>Paystack Fee:</span><span>- KES {PAYSTACK_TRANSFER_FEE_KES.toFixed(2)}</span></div>
                             <hr/>
-                            <div className="flex justify-between font-bold text-base sm:text-lg"><span>Final Payout:</span><span>KES {finalFeePayout > 0 ? finalFeePayout.toFixed(2) : '0.00'}</span></div>
+                            <div className="flex justify-between font-bold text-base sm:text-lg"><span>Final Payout:</span><span>KES {platformFeeCalculatedPayout.toFixed(2)}</span></div>
                         </div>
-                        <Button onClick={handleFeeWithdrawal} disabled={isWithdrawingFees || finalFeePayout <= 0} className="w-full">
+                        <Button onClick={handleFeeWithdrawal} disabled={isWithdrawingFees || parseFloat(platformFeeWithdrawalAmount || '0') <= 0 || parseFloat(platformFeeWithdrawalAmount || '0') > platformFees} className="w-full">
                             {isWithdrawingFees ? 'Withdrawing...' : <><Download className="mr-2 h-4 w-4"/> Withdraw Fees</>}
                         </Button>
                         {feeStatusMessage && <p className="text-center text-sm font-semibold mt-2">{feeStatusMessage}</p>}
@@ -350,14 +383,25 @@ export default function AdminDashboardPage() {
                     <div className="space-y-4">
                         <div>
                             <p className="text-sm text-gray-500">Available Balance</p>
-                            <p className="text-xl sm:text-2xl font-bold">KES {availableBalance.toLocaleString()}</p>
+                            <p className="text-xl sm:text-2xl font-bold">KES {availableDeveloperGiftBalance.toLocaleString()}</p>
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="adminGiftWithdrawalAmount">Amount to Withdraw</Label>
+                            <Input 
+                                id="adminGiftWithdrawalAmount" 
+                                type="number" 
+                                value={adminGiftWithdrawalAmount}
+                                onChange={e => setAdminGiftWithdrawalAmount(e.target.value)}
+                                placeholder={`Max: ${availableDeveloperGiftBalance.toLocaleString()}`}
+                                max={availableDeveloperGiftBalance}
+                            />
                         </div>
                         <div className="p-3 bg-gray-50 rounded-md text-sm space-y-1">
                             <div className="flex justify-between"><span>Paystack Fee:</span><span>- KES {PAYSTACK_TRANSFER_FEE_KES.toFixed(2)}</span></div>
                             <hr/>
-                            <div className="flex justify-between font-bold text-base sm:text-lg"><span>Final Payout:</span><span>KES {finalPayout > 0 ? finalPayout.toFixed(2) : '0.00'}</span></div>
+                            <div className="flex justify-between font-bold text-base sm:text-lg"><span>Final Payout:</span><span>KES {adminGiftCalculatedPayout.toFixed(2)}</span></div>
                         </div>
-                        <Button onClick={handleWithdrawal} disabled={isWithdrawing || finalPayout <= 0} className="w-full">
+                        <Button onClick={handleWithdrawal} disabled={isWithdrawing || parseFloat(adminGiftWithdrawalAmount || '0') <= 0 || parseFloat(adminGiftWithdrawalAmount || '0') > availableDeveloperGiftBalance} className="w-full">
                             {isWithdrawing ? 'Withdrawing...' : <><Download className="mr-2 h-4 w-4"/> Withdraw Gifts</>}
                         </Button>
                         {statusMessage && <p className="text-center text-sm font-semibold mt-2">{statusMessage}</p>}

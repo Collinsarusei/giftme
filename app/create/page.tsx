@@ -267,7 +267,6 @@ export default function CreateEventPage() {
                       onChange={handleImageUpload}
                       className="hidden"
                       id="image-upload"
-                      capture="environment"
                     />
                     <Label htmlFor="image-upload" className="cursor-pointer">
                       <Button type="button" variant="outline" size="sm" asChild>

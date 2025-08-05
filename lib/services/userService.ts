@@ -51,8 +51,10 @@ export class UserService {
       return null
     }
 
-    const { _id, password, ...userWithoutPassword } = user
-    return userWithoutPassword as User
+    // Do NOT return the password field here for security, even if hashed.
+    // OTP fields also should not be returned here.
+    const { password, otp, otpExpires, ...userWithoutSensitiveData } = user;
+    return userWithoutSensitiveData as User;
   }
 
   static async findUserByUsername(username: string): Promise<User | null> {
@@ -67,18 +69,71 @@ export class UserService {
 
   static async findUserByEmail(email: string): Promise<User | null> {
     const collection = await getCollection(this.collectionName)
+    // Return the full document including _id for update operations
     const result = await collection.findOne({ email: { $regex: `^${email}$`, $options: "i" } })
-    if (!result) {
-        return null
-    }
-    const { _id, ...user } = result
-    return user as User
+    return result as User | null
   }
 
   static async updateUser(username: string, updateData: Partial<User>): Promise<boolean> {
     const collection = await getCollection(this.collectionName)
     const result = await collection.updateOne({ username }, { $set: updateData })
     return result.modifiedCount > 0
+  }
+
+  static async updateUserResetToken(userId: ObjectId, token: string, expires: number): Promise<boolean> {
+    const collection = await getCollection(this.collectionName)
+    const result = await collection.updateOne(
+      { _id: userId },
+      { $set: { resetPasswordToken: token, resetPasswordExpires: expires } }
+    )
+    return result.modifiedCount > 0
+  }
+
+  static async findUserByResetToken(token: string, currentTime: number): Promise<User | null> {
+    const collection = await getCollection(this.collectionName)
+    const user = await collection.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: currentTime },
+    })
+    return user as User | null
+  }
+
+  static async updateUserPasswordAndClearToken(userId: ObjectId, hashedPassword: string): Promise<boolean> {
+    const collection = await getCollection(this.collectionName)
+    const result = await collection.updateOne(
+      { _id: userId },
+      { $set: { password: hashedPassword }, $unset: { resetPasswordToken: "", resetPasswordExpires: "" } }
+    )
+    return result.modifiedCount > 0
+  }
+
+  static async updateUserOtp(userId: ObjectId, otp: string, otpExpires: number): Promise<boolean> {
+    const collection = await getCollection(this.collectionName);
+    const result = await collection.updateOne(
+      { _id: userId },
+      { $set: { otp: otp, otpExpires: otpExpires } }
+    );
+    return result.modifiedCount > 0;
+  }
+
+  static async verifyUserOtp(email: string, otp: string): Promise<User | null> {
+    const collection = await getCollection(this.collectionName);
+    const user = await collection.findOne({
+      email: { $regex: `^${email}$`, $options: "i" },
+      otp: otp,
+      otpExpires: { $gt: Date.now() }, // OTP must not be expired
+    });
+
+    if (user) {
+      // Clear OTP after successful verification
+      await collection.updateOne(
+        { _id: user._id },
+        { $unset: { otp: "", otpExpires: "" } }
+      );
+      const { password, otp, otpExpires, ...userWithoutSensitiveData } = user; // Exclude sensitive fields
+      return userWithoutSensitiveData as User;
+    }
+    return null;
   }
 
   static async addEventToUser(username: string, eventId: string): Promise<boolean> {

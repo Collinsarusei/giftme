@@ -319,6 +319,27 @@ export class EventService {
   }
 
   /**
+   * Permanently deletes an event from the database.
+   * This operation is irreversible.
+   * @param eventId The ID of the event to permanently delete.
+   * @returns A promise that resolves to true if the event was deleted, false otherwise.
+   */
+  static async hardDeleteEvent(eventId: string): Promise<boolean> {
+    try {
+      const client = await clientPromise;
+      const db = client.db();
+      const collection = db.collection<Event>("events");
+
+      const result = await collection.deleteOne({ id: eventId });
+      
+      return result.deletedCount > 0;
+    } catch (error) {
+      console.error("Error hard deleting event:", error);
+      return false;
+    }
+  }
+
+  /**
    * Marks events that have passed their `expiresAt` date as "expired".
    * @returns A promise that resolves to an array of the newly expired Event objects.
    */
@@ -353,6 +374,30 @@ export class EventService {
     } catch (error) {
       console.error("Error expiring past events:", error);
       return [];
+    }
+  }
+
+  /**
+   * Updates the images array for a specific event.
+   * @param eventId The ID of the event to update.
+   * @param images An array of Base64 image strings.
+   * @returns A promise that resolves to true if the event was updated, false otherwise.
+   */
+  static async updateEventImages(eventId: string, images: string[]): Promise<boolean> {
+    try {
+      const client = await clientPromise;
+      const db = client.db();
+      const collection = db.collection<Event>("events");
+
+      const result = await collection.updateOne(
+        { id: eventId },
+        { $set: { images: images } }
+      );
+      
+      return result.modifiedCount > 0;
+    } catch (error) {
+      console.error("Error updating event images:", error);
+      return false;
     }
   }
 }

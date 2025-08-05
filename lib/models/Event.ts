@@ -41,6 +41,7 @@ export interface Event {
   createdAt: string
   creatorName: string
   createdBy: string
+  creatorEmail?: string; // Added this field
   gifts: Gift[]
   status: "active" | "completed" | "cancelled" | "expired" | "deleted"
   expiresAt: string
@@ -59,4 +60,5 @@ export interface CreateEventData {
   currency: string
   creatorName: string
   createdBy: string
+  creatorEmail?: string; // Added this field
 }

@@ -12,4 +12,6 @@ const nextConfig = {
   // Your regular Next.js config options here
 };
 
-export default withPWA(nextConfig);
+// Temporarily disabling PWA for build troubleshooting.
+// export default withPWA(nextConfig);
+export default nextConfig;

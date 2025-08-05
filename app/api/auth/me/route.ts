@@ -4,6 +4,8 @@ import { cookies } from "next/headers";
 
 const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_key";
 
+export const dynamic = 'force-dynamic'; // This is the fix
+
 export async function GET(request: NextRequest) {
   try {
     const cookieStore = cookies();

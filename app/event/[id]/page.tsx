@@ -665,15 +665,21 @@ export default function EventPage() {
             <span className="text-xl font-bold">CelebrateWith.me</span>
           </div>
           <p className="text-gray-400 mb-4">Making celebrations more meaningful, one gift at a time</p>
-          <Link href="/support-developer">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2 border-gray-600 text-gray-300 hover:bg-gray-800 bg-transparent"
-            >
-              <Heart className="h-4 w-4" />💖 Support the Developer
-            </Button>
-          </Link>
+          <nav className="flex justify-center items-center gap-4 mb-4 text-sm">
+            <Link href="/about-us" className="hover:text-purple-400 transition-colors">About Us</Link>
+            <Link href="/contact-us" className="hover:text-purple-400 transition-colors">Contact Us</Link>
+          </nav>
+          <div className="flex justify-center items-center gap-4">
+            <Link href="/support-developer">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 border-gray-600 text-gray-300 hover:bg-gray-800 bg-transparent"
+              >
+                <Heart className="h-4 w-4" />💖 Support the Developer
+              </Button>
+            </Link>
+          </div>
         </div>
       </footer>
     </div>

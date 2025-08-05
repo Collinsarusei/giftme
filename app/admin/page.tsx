@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Gift, Code, Trash2, Loader2, PlusCircle, LogOut, Home, Wallet, Download, DollarSign } from 'lucide-react';
 import Link from 'next/link';
+import { Event } from '@/lib/models/Event'; // Import Event type
 
 interface Project {
     _id: string;
@@ -36,6 +37,7 @@ export default function AdminDashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [developerGifts, setDeveloperGifts] = useState<AdminGift[]>([]);
   const [platformFees, setPlatformFees] = useState(0);
+  const [allEvents, setAllEvents] = useState<Event[]>([]); // New state for all events
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
@@ -46,6 +48,7 @@ export default function AdminDashboardPage() {
   const [feeStatusMessage, setFeeStatusMessage] = useState('');
   const [adminGiftWithdrawalAmount, setAdminGiftWithdrawalAmount] = useState<string>("");
   const [platformFeeWithdrawalAmount, setPlatformFeeWithdrawalAmount] = useState<string>("");
+  const [isDeletingEvent, setIsDeletingEvent] = useState<string | null>(null); // State for event deletion loading
 
   useEffect(() => {
     async function fetchAdminData() {
@@ -59,10 +62,11 @@ export default function AdminDashboardPage() {
           user = authData.user;
           setCurrentUser(user);
 
-          const [projectsRes, giftsRes, feesRes] = await Promise.all([
+          const [projectsRes, giftsRes, feesRes, eventsRes] = await Promise.all([
             fetch('/api/projects'),
             fetch('/api/admin/gifts', { headers: { 'x-user-email': user.email }}),
-            fetch('/api/admin/platform-fees', { headers: { 'x-user-email': user.email }})
+            fetch('/api/admin/platform-fees', { headers: { 'x-user-email': user.email }}),
+            fetch('/api/events') // Fetch all events
           ]);
           
           const projectsData = await projectsRes.json();
@@ -76,6 +80,9 @@ export default function AdminDashboardPage() {
 
           const feesData = await feesRes.json();
           if (feesData.success) setPlatformFees(feesData.totalPlatformFee);
+
+          const eventsData = await eventsRes.json();
+          if (eventsData.success) setAllEvents(eventsData.events);
 
         } else {
           router.push('/auth');
@@ -140,6 +147,32 @@ export default function AdminDashboardPage() {
         alert('Failed to delete project.');
     }
   }
+
+  const handleHardDeleteEvent = async (eventId: string) => {
+    if (!confirm("Are you sure you want to permanently delete this event? This action cannot be undone.")) {
+      return;
+    }
+
+    setIsDeletingEvent(eventId);
+    try {
+      const res = await fetch(`/api/admin/events/${eventId}`, {
+        method: 'DELETE',
+        headers: { 'x-user-email': currentUser.email }, // Pass admin email for auth
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message); // Inform about success
+        setAllEvents(prevEvents => prevEvents.filter(e => e.id !== eventId));
+      } else {
+        alert(data.message);
+      }
+    } catch (error) {
+      console.error("Error hard deleting event:", error);
+      alert("An error occurred while permanently deleting the event.");
+    } finally {
+      setIsDeletingEvent(null);
+    }
+  };
 
   const handleWithdrawal = async () => {
     const amountToWithdraw = parseFloat(adminGiftWithdrawalAmount);
@@ -311,6 +344,38 @@ export default function AdminDashboardPage() {
                     </Button>
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* New Card for Managing All Events */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center text-lg sm:text-xl"><Trash2 className="mr-2"/>Manage All Events</CardTitle>
+              <CardDescription>Permanently delete any event from the database.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {allEvents.length > 0 ? (
+                  allEvents.map(event => (
+                    <div key={event.id} className="flex items-center justify-between p-2 border rounded-md">
+                      <div className="flex-grow">
+                        <p className="font-semibold">{event.name} by {event.creatorName}</p>
+                        <p className="text-sm text-gray-500">ID: {event.id} | Status: {event.status}</p>
+                      </div>
+                      <Button 
+                        variant="destructive" 
+                        size="sm" 
+                        onClick={() => handleHardDeleteEvent(event.id)}
+                        disabled={isDeletingEvent === event.id}
+                      >
+                        {isDeletingEvent === event.id ? <Loader2 className="h-4 w-4 animate-spin"/> : <Trash2 className="h-4 w-4"/>}
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <p>No events found.</p>
+                )}
               </div>
             </CardContent>
           </Card>

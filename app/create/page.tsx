@@ -57,17 +57,78 @@ export default function CreateEventPage() {
     fetchCurrentUser();
   }, [router]);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const resizeImage = (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+
+        img.onload = () => {
+          const MAX_WIDTH = 800; // Max width for resized image
+          const MAX_HEIGHT = 600; // Max height for resized image
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx?.drawImage(img, 0, 0, width, height);
+
+          // Convert canvas to base64 with a lower quality for further compression
+          resolve(canvas.toDataURL("image/jpeg", 0.7)); // Adjust quality (0.0 to 1.0)
+        };
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormError(null);
     const files = Array.from(e.target.files || [])
     const remainingSlots = 3 - formData.images.length
     const filesToAdd = files.slice(0, remainingSlots)
 
     if (filesToAdd.length > 0) {
-      setFormData((prev) => ({
-        ...prev,
-        images: [...prev.images, ...filesToAdd],
-      }))
+      setIsSubmitting(true); // Temporarily set submitting to prevent double submission until images are processed
+      const resizedImagePromises = filesToAdd.map(file => resizeImage(file));
+      try {
+        const resizedBase64Images = await Promise.all(resizedImagePromises);
+        // Convert Base64 back to File objects for consistent state management
+        const resizedFiles = resizedBase64Images.map((base64String, index) => {
+          const byteString = atob(base64String.split(',')[1]);
+          const mimeString = base64String.split(',')[0].split(':')[1].split(';')[0];
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) {
+              ia[i] = byteString.charCodeAt(i);
+          }
+          return new File([ab], `resized_image_${index}.jpeg`, { type: mimeString });
+        });
+
+        setFormData((prev) => ({
+          ...prev,
+          images: [...prev.images, ...resizedFiles],
+        }));
+      } catch (error) {
+        console.error("Error resizing images:", error);
+        setFormError("Failed to process images. Please try smaller files.");
+      } finally {
+        setIsSubmitting(false);
+      }
     }
 
     if (files.length > remainingSlots) {
@@ -88,7 +149,7 @@ export default function CreateEventPage() {
     setFormError(null);
 
     try {
-      // Convert images to base64 for storage
+      // Convert resized File objects to base64 for storage
       const imageUrls = await Promise.all(
         formData.images.map(async (file) => {
           return new Promise<string>((resolve, reject) => {
@@ -99,9 +160,9 @@ export default function CreateEventPage() {
           })
         }),
       );
-      console.log("Image URLs generated. Count:", imageUrls.length);
+      console.log("Final Image URLs for submission. Count:", imageUrls.length);
       if (imageUrls.length > 0) {
-        console.log("Size of first image (base64):"), imageUrls[0]?.length; 
+        console.log("Size of first final image (base64):"), imageUrls[0]?.length; 
       }
 
       const eventData = {

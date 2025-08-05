@@ -14,6 +14,10 @@ export interface User {
     phone?: string
     bio?: string
   }
+  resetPasswordToken?: string
+  resetPasswordExpires?: number
+  otp?: string; // New: OTP for 2FA login
+  otpExpires?: number; // New: OTP expiration timestamp
 }
 
 export interface CreateUserData {

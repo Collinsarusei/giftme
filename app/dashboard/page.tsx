@@ -25,7 +25,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Gift, Eye, Calendar, DollarSign, Wallet, Download, Trash2, Home, LogOut, Heart } from "lucide-react"
+import { Gift, Eye, Calendar, DollarSign, Wallet, Download, Trash2, Home, LogOut, Heart, Image as ImageIcon } from "lucide-react"
 import Link from "next/link"
 
 export default function DashboardPage() {
@@ -287,9 +287,14 @@ export default function DashboardPage() {
                             <div className="text-center"><Heart className="mx-auto h-6 w-6 text-red-500"/><p className="font-bold text-lg">{selectedEvent.likes || 0}</p><p className="text-sm text-gray-500">Likes</p></div>
                             <div className="text-center"><Calendar className="mx-auto h-6 w-6 text-orange-500"/><p className="font-bold text-lg">{new Date(selectedEvent.date).toLocaleDateString()}</p><p className="text-sm text-gray-500">Date</p></div>
                         </CardContent>
-                        <CardFooter className="flex justify-between">
+                        <CardFooter className="flex justify-between flex-wrap gap-2">
                             <Link href={`/event/${selectedEvent.id}`} passHref>
                                 <Button variant="outline">View Event Page</Button>
+                            </Link>
+                            <Link href={`/event/${selectedEvent.id}/manage-images`} passHref>
+                                <Button variant="outline" className="bg-blue-500 hover:bg-blue-600 text-white">
+                                    <ImageIcon className="mr-2 h-4 w-4"/> Change Images
+                                </Button>
                             </Link>
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>

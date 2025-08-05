@@ -11,6 +11,8 @@ import { useEffect, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { InstallPWA } from "@/components/ui/install-pwa"
 
+export const dynamic = 'force-dynamic'; // Ensures the page is rendered dynamically
+
 const HomePage = () => {
   const [sampleEvents, setSampleEvents] = useState<any[]>([])
   const [searchQuery, setSearchQuery] = useState("")
@@ -278,6 +280,10 @@ const HomePage = () => {
             <span className="text-xl font-bold">CelebrateWith.me</span>
           </div>
           <p className="text-gray-400 mb-4">Making celebrations more meaningful, one gift at a time</p>
+          <nav className="flex justify-center items-center gap-4 mb-4 text-sm">
+            <Link href="/about-us" className="hover:text-purple-400 transition-colors">About Us</Link>
+            <Link href="/contact-us" className="hover:text-purple-400 transition-colors">Contact Us</Link>
+          </nav>
           <div className="flex justify-center items-center gap-4">
             <Link href="/support-developer">
               <Button
@@ -290,6 +296,7 @@ const HomePage = () => {
             </Link>
             <InstallPWA />
           </div>
+          <p className="text-sm text-gray-400 mt-4">&copy; {new Date().getFullYear()} CelebrateWith.me. All rights reserved.</p>
         </div>
       </footer>
     </div>

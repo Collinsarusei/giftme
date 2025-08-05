@@ -2,7 +2,8 @@ import { type NextRequest, NextResponse } from "next/server";
 import { UserService } from "@/lib/services/userService";
 import { getDatabase } from "@/lib/mongodb"; // Import getDatabase
 import nodemailer from "nodemailer"; // Import nodemailer
-import crypto from "crypto"; // Import crypto for OTP generation
+
+// Removed crypto import as we'll use Math.random for numeric OTP
 
 const EMAIL_SERVER_HOST = process.env.EMAIL_SERVER_HOST;
 const EMAIL_SERVER_PORT = process.env.EMAIL_SERVER_PORT;
@@ -28,8 +29,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate a 6-digit OTP
-    const otp = crypto.randomBytes(3).toString('hex').slice(0, 6); // Generates 6 random hex characters
+    // Generate a 6-digit NUMERIC OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // Generates a random 6-digit number
     const otpExpires = Date.now() + 5 * 60 * 1000; // OTP valid for 5 minutes
 
     // Update user with OTP and expiry

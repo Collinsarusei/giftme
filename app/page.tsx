@@ -4,10 +4,10 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Gift, Heart, PartyPopper, Sparkles, Search, User, CreditCard } from "lucide-react"
+import { Gift, Heart, PartyPopper, Sparkles, Search, User, CreditCard, ChevronLeft, ChevronRight } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { Input } from "@/components/ui/input"
 import { InstallPWA } from "@/components/ui/install-pwa"
 
@@ -18,14 +18,30 @@ const HomePage = () => {
   const [searchQuery, setSearchQuery] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [eventsPerPage] = useState(6) // Number of events to display per page
+  const [totalEvents, setTotalEvents] = useState(0)
 
-  const filteredEvents = sampleEvents.filter(
-    (event: any) =>
-      (event.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        event.type?.toLowerCase().includes(searchQuery.toLowerCase())) &&
-      event.status === "active" &&
-      new Date(event.expiresAt) >= new Date()
-  )
+  const fetchEvents = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const eventRes = await fetch(`/api/events?page=${currentPage}&limit=${eventsPerPage}`);
+      const eventData = await eventRes.json();
+      if (eventData.success) {
+        setSampleEvents(eventData.events);
+        setTotalEvents(eventData.totalEvents);
+      } else {
+        setSampleEvents([]);
+        setTotalEvents(0);
+      }
+    } catch (error) {
+      console.error("Error fetching events:", error);
+      setSampleEvents([]);
+      setTotalEvents(0);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentPage, eventsPerPage]);
 
   useEffect(() => {
     async function fetchInitialData() {
@@ -39,24 +55,37 @@ const HomePage = () => {
           setCurrentUser(null);
         }
 
-        const eventRes = await fetch(`/api/events`);
-        const eventData = await eventRes.json();
-        if (eventData.success) {
-          setSampleEvents(eventData.events);
-        } else {
-          setSampleEvents([]);
-        }
+        await fetchEvents(); // Fetch events with pagination
+
       } catch (error) {
         console.error("Error loading initial data:", error);
         setCurrentUser(null);
         setSampleEvents([]);
+        setTotalEvents(0);
       } finally {
         setIsLoading(false);
       }
     }
     fetchInitialData();
-  }, []);
+  }, [fetchEvents]);
 
+  // Filter events based on search query (frontend filtering of already paginated results)
+  const filteredEvents = sampleEvents.filter(
+    (event: any) =>
+      (event.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        event.type?.toLowerCase().includes(searchQuery.toLowerCase()))
+        // The backend now handles active status and expiration filtering
+  );
+
+  const totalPages = Math.ceil(totalEvents / eventsPerPage);
+
+  const handlePreviousPage = () => {
+    setCurrentPage((prevPage) => Math.max(prevPage - 1, 1));
+  };
+
+  const handleNextPage = () => {
+    setCurrentPage((prevPage) => Math.min(prevPage + 1, totalPages));
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-yellow-50">
@@ -150,60 +179,88 @@ const HomePage = () => {
           </p>
         </div>
 
-        {filteredEvents.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 max-w-6xl mx-auto">
-            {filteredEvents.map((event: any) => (
-              <Card key={event.id} className="overflow-hidden hover:shadow-lg transition-shadow duration-300 group">
-                <div className="relative">
-                    <Image
-                      src={event.images?.[0] || "/placeholder.svg?height=200&width=300"}
-                      alt={event.name || "Event"}
-                      width={300}
-                      height={200}
-                      unoptimized
-                      className="w-full h-40 sm:h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  <div className="absolute top-3 sm:top-4 left-3 sm:left-4 bg-purple-500 p-1.5 sm:p-2 rounded-full">
-                    <PartyPopper className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+        {isLoading ? (
+          <div className="text-center py-12">Loading events...</div>
+        ) : filteredEvents.length > 0 ? (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 max-w-6xl mx-auto">
+              {filteredEvents.map((event: any) => (
+                <Card key={event.id} className="overflow-hidden hover:shadow-lg transition-shadow duration-300 group">
+                  <div className="relative">
+                      <Image
+                        src={event.images?.[0] || "/placeholder.svg?height=200&width=300"}
+                        alt={event.name || "Event"}
+                        width={300}
+                        height={200}
+                        unoptimized
+                        className="w-full h-40 sm:h-48 object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    <div className="absolute top-3 sm:top-4 left-3 sm:left-4 bg-purple-500 p-1.5 sm:p-2 rounded-full">
+                      <PartyPopper className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+                    </div>
+                    <Badge className="absolute top-3 sm:top-4 right-3 sm:right-4 bg-white/90 text-gray-800 text-xs sm:text-sm">
+                      {event.type}
+                    </Badge>
                   </div>
-                  <Badge className="absolute top-3 sm:top-4 right-3 sm:right-4 bg-white/90 text-gray-800 text-xs sm:text-sm">
-                    {event.type}
-                  </Badge>
-                </div>
-                <CardContent className="p-4 sm:p-6">
-                  <h3 className="text-lg sm:text-xl font-semibold mb-2">{event.name}</h3>
-                  <p className="text-gray-600 mb-4 text-sm sm:text-base">{new Date(event.date).toLocaleDateString()}</p>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs sm:text-sm">
-                      <span>
-                        Raised: {event.currency} {(event.raised || 0).toLocaleString()}
-                      </span>
-                      {event.goal && (
+                  <CardContent className="p-4 sm:p-6">
+                    <h3 className="text-lg sm:text-xl font-semibold mb-2">{event.name}</h3>
+                    <p className="text-gray-600 mb-4 text-sm sm:text-base">{new Date(event.date).toLocaleDateString()}</p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs sm:text-sm">
                         <span>
-                          Goal: {event.currency} {event.goal.toLocaleString()}
+                          Raised: {event.currency} {(event.raised || 0).toLocaleString()}
                         </span>
+                        {event.goal && (
+                          <span>
+                            Goal: {event.currency} {event.goal.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                      {event.goal && (
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full"
+                            style={{ width: `${Math.min(((event.raised || 0) / event.goal) * 100, 100)}%` }}
+                          ></div>
+                        </div>
                       )}
                     </div>
-                    {event.goal && (
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full"
-                          style={{ width: `${Math.min(((event.raised || 0) / event.goal) * 100, 100)}%` }}
-                        ></div>
-                      </div>
-                    )}
-                  </div>
-                  <Link href={`/event/${event.id}`}
-                    className={event.status === "expired" ? "pointer-events-none opacity-50" : ""}
-                  >
-                    <Button className="w-full mt-4 bg-transparent text-sm sm:text-base" variant="outline" disabled={event.status === "expired"}>
-                      {event.status === "expired" ? "Event Expired" : "View Event Page"}
-                    </Button>
-                  </Link>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    <Link href={`/event/${event.id}`}
+                      className={event.status === "expired" ? "pointer-events-none opacity-50" : ""}
+                    >
+                      <Button className="w-full mt-4 bg-transparent text-sm sm:text-base" variant="outline" disabled={event.status === "expired"}>
+                        {event.status === "expired" ? "Event Expired" : "View Event Page"}
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="flex justify-center items-center gap-4 mt-8">
+                <Button
+                  variant="outline"
+                  onClick={handlePreviousPage}
+                  disabled={currentPage === 1}
+                  className="gap-2"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                <span className="text-gray-700">Page {currentPage} of {totalPages}</span>
+                <Button
+                  variant="outline"
+                  onClick={handleNextPage}
+                  disabled={currentPage === totalPages}
+                  className="gap-2"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </>
         ) : searchQuery ? (
           <div className="text-center py-12">
             <Search className="h-16 w-16 text-gray-300 mx-auto mb-4" />
@@ -213,7 +270,7 @@ const HomePage = () => {
         ) : (
           <div className="text-center py-12">
             <PartyPopper className="h-16 w-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-600 mb-2">No Events Yet</h3>
+            <h3 className="text-xl font-semibold text-gray-600 mb-2">No Active Events Yet</h3>
             <p className="text-gray-500 mb-6">Be the first to create an event and inspire others!</p>
             <Link href={currentUser ? "/create" : "/auth"}>
               <Button className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">

@@ -6,26 +6,31 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const createdBy = searchParams.get("createdBy")
     const query = searchParams.get("query")
-    let events
+    const page = parseInt(searchParams.get("page") || "1")
+    const limit = parseInt(searchParams.get("limit") || "6")
+
+    let eventsResult;
 
     if (createdBy) {
       // For creator dashboard, show all events (active, completed, cancelled, expired)
-      events = await EventService.getEventsByCreator(createdBy)
+      eventsResult = { events: await EventService.getEventsByCreator(createdBy), total: 0 }; // total not needed here
     } else if (query) {
-      // For search, only show active events (already handled in EventService.searchEvents) - Assuming searchEvents only returns active ones.
-      // If searchEvents needs to include expired events, that logic should be updated in eventService.
-      events = await EventService.searchEvents(query) // Keep original search behavior for now
+      // For search, only show active events (already handled in EventService.searchEvents)
+      eventsResult = { events: await EventService.searchEvents(query), total: 0 }; // total not needed here
     } else {
-      // For homepage, show active and expired events
-      events = await EventService.getPublicEvents(6) // Limit to 6 for homepage as before
+      // For homepage, show active events with pagination
+      eventsResult = await EventService.getPublicEvents(page, limit); // Fetch active events with pagination
     }
 
     // Remove MongoDB _id from each event
-    const eventsResponse = events.map(({ _id, ...rest }) => rest)
+    const eventsResponse = eventsResult.events.map(({ _id, ...rest }) => rest);
 
     return NextResponse.json({
       success: true,
       events: eventsResponse,
+      totalEvents: eventsResult.total, // Include total for pagination on frontend
+      page,
+      limit,
     })
   } catch (error) {
     console.error("Get events error:", error)
@@ -50,13 +55,7 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({
             to: event.createdBy,
             subject: `Your event '${event.name}' has expired - Withdraw your pending gifts`,
-            message: `Hi,
-
-Your event '${event.name}' has expired. You have pending Paystack withdrawals. Please use the following private link to access your withdrawal page:
-
-${process.env.NEXT_PUBLIC_BASE_URL}/dashboard?withdrawal=${event.id}
-
-Thank you for using CelebrateWith.me!`,
+            message: `Hi,\n\nYour event '${event.name}' has expired. You have pending Paystack withdrawals. Please use the following private link to access your withdrawal page:\n\n${process.env.NEXT_PUBLIC_BASE_URL}/dashboard?withdrawal=${event.id}\n\nThank you for using CelebrateWith.me!`,
           }),
         })
       }

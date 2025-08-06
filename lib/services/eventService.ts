@@ -194,38 +194,43 @@ export class EventService {
   }
 
   /**
-   * Fetches events suitable for the public homepage (active and expired, but not cancelled).
-   * @param limit The maximum number of events to return.
-   * @returns A promise that resolves to an array of Event objects.
+   * Fetches events suitable for the public homepage (active only), with pagination.
+   * @param page The current page number (1-indexed).
+   * @param limit The number of events per page.
+   * @returns A promise that resolves to an object containing an array of active Event objects and the total count.
    */
-  static async getPublicEvents(limit?: number): Promise<Event[]> {
+  static async getPublicEvents(page: number = 1, limit: number = 6): Promise<{ events: Event[], total: number }> {
     try {
       const client = await clientPromise;
       const db = client.db();
       const collection = db.collection<Event>("events");
 
-      // Find events that are 'active' or 'expired', and not 'cancelled'
-      let query: { status: { $in: Array<Event['status']> } } = {
-        status: { $in: ["active", "expired"] }
+      const now = new Date().toISOString();
+
+      // Query for active events that have not expired
+      const query = {
+        status: "active" as Event['status'],
+        expiresAt: { $gte: now },
       };
 
-      let cursor = collection.find(query);
-
-      if (limit) {
-        cursor = cursor.limit(limit);
-      }
-
-      const events = await cursor.toArray();
-      return events;
+      const total = await collection.countDocuments(query);
+      
+      const events = await collection.find(query)
+        .sort({ createdAt: -1 }) // Sort by creation date, newest first
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .toArray();
+      
+      return { events, total };
     } catch (error) {
-      console.error("Error fetching public events:", error);
-      return [];
+      console.error("Error fetching paginated public events:", error);
+      return { events: [], total: 0 };
     }
   }
 
     /**
    * Searches events based on a query string.
-   * Returns events that are 'active' or 'expired'.
+   * Returns events that are 'active' only.
    * @param query The search string.
    * @returns A promise that resolves to an array of matching Event objects.
    */
@@ -236,10 +241,12 @@ export class EventService {
       const collection = db.collection<Event>("events");
 
       const searchRegex = new RegExp(query, 'i'); // Case-insensitive search
+      const now = new Date().toISOString();
 
-      // Search in name, description, creatorName, or type fields
+      // Search in name, description, creatorName, or type fields, only for active and unexpired events
       const events = await collection.find({
-        status: { $in: ["active", "expired"] }, // Only search active/expired events
+        status: "active" as Event['status'],
+        expiresAt: { $gte: now },
         $or: [
           { name: { $regex: searchRegex } },
           { description: { $regex: searchRegex } },
@@ -364,7 +371,7 @@ export class EventService {
       // Fetch the events that were just expired to return them
       if (result.modifiedCount > 0) {
         const newlyExpiredEvents = await collection.find({
-          status: "expired",
+          status: "expired" as Event['status'],
           expiresAt: { $lt: now }, // Re-query with the same condition to get the updated docs
         }).toArray();
         return newlyExpiredEvents;
